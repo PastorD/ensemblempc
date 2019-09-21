@@ -174,7 +174,7 @@ class MPCControllerDense(Controller):
         self.a = a
         self.B = B
 
-        check_ab = True
+        check_ab = False
         if check_ab:
             x0  = np.linspace(-5,40,nx)
             x00 = np.linspace(-5,40,nx)
@@ -379,8 +379,16 @@ class MPCControllerDense(Controller):
 
         return  self._osqp_result.x[:nu]
 
-    def parse_result(self,x,u):
-        return  np.transpose(np.reshape( self.a @ x + self.B @ u, (self.N+1,self.nx)))
+    def parse_result(self,x0):
+        # Obtain the predicted state over the MPC horizon
+        # X as nparray [ns,]
+        u = self._osqp_result.x[:nu]
+        xx = np.transpose(np.reshape( self.a @ x0 + self.B @ u, (self.N+1,self.nx)))
+        if lifting: 
+            xs = C @ xx
+        else:
+            xs = xx
+        return  xx
 
     def get_control_prediction(self):
         return np.transpose(np.reshape( self._osqp_result.x[-self.N*self.nu:], (self.N,self.nu)))

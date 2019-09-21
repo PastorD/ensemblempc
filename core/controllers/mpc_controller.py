@@ -189,11 +189,14 @@ class MPCController(Controller):
 
         if self.q_d.ndim==1:
             # Update the local reference trajectory
-            xr = np.transpose(np.tile(self.q_d,N+1))
+            #xr = np.transpose(np.tile(self.q_d,N+1))
+            #xr = np.transpose(np.tile(self.q_d,N+1))
+            xr = np.kron(np.ones(N), self.q_d.reshape(self.q_d.shape[0],-1))
 
         # Lift the current state if necessary
         if (self.lifting): 
             x = np.transpose(self.edmd_object.lift(x.reshape((x.shape[0],1)),xr[:,0].reshape((xr.shape[0],1))))[:,0]
+            
         
         self._osqp_l[:self.nx] = -x
         self._osqp_u[:self.nx] = -x
@@ -212,7 +215,14 @@ class MPCController(Controller):
         return  self._osqp_result.x[-N*nu:-(N-1)*nu]
 
     def parse_result(self):
-        return  np.transpose(np.reshape( self._osqp_result.x[:(self.N+1)*self.nx], (self.N+1,self.nx)))
+        xx = np.transpose(np.reshape( self._osqp_result.x[:(self.N+1)*self.nx], (self.N+1,self.nx)))
+
+        if self.lifting: 
+            xs = self.C @ xx
+        else:
+            xs = xx
+        return  xs
+
 
     def get_control_prediction(self):
         return np.transpose(np.reshape( self._osqp_result.x[-self.N*self.nu:], (self.N,self.nu)))

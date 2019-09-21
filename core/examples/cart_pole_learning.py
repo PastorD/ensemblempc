@@ -72,7 +72,7 @@ plot_eigen = False
 eigenfunction_max_power = 2
 l2_diffeomorphism = 0.26316                 #Fix for current architecture
 jacobian_penalty_diffeomorphism = 3.95   #Fix for current architecture
-load_diffeomorphism_model = True
+load_diffeomorphism_model = False
 diffeomorphism_model_file = 'diff_model_cart_pole'
 diff_n_epochs = 100
 diff_train_frac = 0.99
@@ -98,8 +98,10 @@ l1_ratio_edmd = 1.00
 
 # Simulation parameters (evaluate performance)
 load_fit = True
-test_open_loop = True
+test_open_loop = False
 plot_open_loop = test_open_loop
+qd_closed_loop = "2 stages"
+plot_times_MPC = False
 save_traj = False
 save_fit = not load_fit
 Ntraj_pred = 30
@@ -435,19 +437,26 @@ t0 = time.process_time()
 print('Evaluate Performance with closed loop trajectory tracking...', end=" ")
 # Set up trajectory and controller for prediction task:
 x_0 = array([2., 0.25, 0., 0.])
-mpc_controller.eval(x_0, 0)
-q_d_pred = mpc_controller.parse_result()
 
-x_0 = q_d_pred[:,0]
+if qd_closed_loop=="linear MPC":
+    mpc_controller.eval(x_0, 0)
+    q_d_pred = mpc_controller.parse_result()
+elif qd_closed_loop=="2 stages":
+    Q_qd = sparse.diags([0,0,0,0])
+    QN_qd = sparse.diags([100000.,100000.,50000.,10000.])
+    umax_qd = 5
+    MPC_horizon_qd = 2 # [s]
+
+#x_0 = q_d_pred[:,0]
 t_pred = t_d.squeeze()
-t_pred = t_pred[:int(t_pred.shape[0]/2*2)]
+#t_pred = t_pred[:int(t_pred.shape[0]/2*2)]
 noise_var_pred = 0.0
-output_pred = CartPoleTrajectory(system_true, q_d_pred,t_pred)
+#output_pred = CartPoleTrajectory(system_true, q_d_pred,t_pred)
 
 # Set up MPC parameters
-Q = sparse.diags([5000,5000,500,500])
+Q = sparse.diags([10000,10000,5000,5000])
 QN = Q
-D = sparse.diags([500,300,50,60])
+D = sparse.diags([500,300,100,200])
 
 upper_bounds_MPC_control = array([np.Inf, np.Inf, np.Inf, np.Inf])  # State constraints, check they are higher than upper_bounds
 lower_bounds_MPC_control = -upper_bounds_MPC_control  # State constraints
@@ -456,10 +465,11 @@ MPC_horizon = 0.25 # [s]
 plotMPC = False
 
 # Linearized with PD
-linearlize_PD_controller = PDController(output_pred, K_p, K_d, noise_var=0)
-xs_lin_PD, us_lin_PD = system_true.simulate(x_0, linearlize_PD_controller, t_pred)
-xs_lin_PD = xs_lin_PD.transpose()
-us_lin_PD = us_lin_PD.transpose()
+# linearlize_PD_controller = PDController(output_pred, K_p, K_d, noise_var=0)
+# xs_lin_PD, us_lin_PD = system_true.simulate(x_0, linearlize_PD_controller, t_pred)
+# xs_lin_PD = xs_lin_PD.transpose()
+# us_lin_PD = us_lin_PD.transpose()
+
 
 
 #* eDMD 
@@ -476,6 +486,30 @@ print('keedmd controllability matrix rank is {}, ns={}, nz={}'.format(np.linalg.
 Cmatrix = control.ctrb(A=edmd_model.A, B=edmd_model.B)
 print('edmd controllability matrix rank is {}, ns={}, nz={}'.format(np.linalg.matrix_rank(Cmatrix),n,keedmd_model.A.shape[0]))
 
+if (qd_closed_loop=="2 stages"):
+        linearlize_mpc_controller_qd = MPCController(linear_dynamics=nominal_sys, 
+                            N=int(MPC_horizon_qd/dt),
+                            dt=dt, 
+                            umin=array([-umax_qd]), 
+                            umax=array([+umax_qd]),
+                            xmin=lower_bounds, 
+                            xmax=upper_bounds, 
+                            Q=Q_qd, 
+                            R=R, 
+                            QN=QN_qd, 
+                            xr=zeros(n))
+        linearlize_mpc_controller_qd.eval(x_0, 0)
+        q_d_pred_lin = linearlize_mpc_controller_qd.parse_result()
+        figure()
+        title('Lin q_d')
+        for j in range(n):
+            subplot(n,1,j+1)
+            plot(t_eval, q_d_pred_lin[j,:] , linewidth=2)
+            grid()
+        #show()
+
+
+
 # Linearized with MPC
 linearlize_mpc_controller = MPCControllerDense(linear_dynamics=nominal_sys,
                                                 N=int(MPC_horizon/dt),
@@ -487,9 +521,10 @@ linearlize_mpc_controller = MPCControllerDense(linear_dynamics=nominal_sys,
                                                 Q=Q,
                                                 R=R,
                                                 QN=QN,
-                                                xr=q_d_pred,
+                                                xr=q_d_pred_lin,
                                                 plotMPC=plotMPC,
                                                 name='Lin')
+
 
 xs_lin_MPC, us_lin_MPC = system_true.simulate(x_0, linearlize_mpc_controller, t_pred)
 xs_lin_MPC = xs_lin_MPC.transpose()
@@ -498,15 +533,40 @@ if plotMPC:
     linearlize_mpc_controller.finish_plot(xs_lin_MPC,us_lin_MPC, us_lin_PD, t_pred,"LinMPC_thoughts.pdf")
 
 
-figure()
-hist(linearlize_mpc_controller.run_time*1000)
-title('MPC Run Time Histogram sparse. Mean {:.2f}ms'.format(np.mean(linearlize_mpc_controller.run_time*1000)))
-xlabel('Time(ms)')
-savefig('MPC Run Time Histogram dense.png',format='pdf', dpi=1200)
-#show()
+if plot_times_MPC:
+    figure()
+    hist(linearlize_mpc_controller.run_time*1000)
+    title('MPC Run Time Histogram sparse. Mean {:.2f}ms'.format(np.mean(linearlize_mpc_controller.run_time*1000)))
+    xlabel('Time(ms)')
+    savefig('MPC Run Time Histogram dense.png',format='pdf', dpi=1200)
+    close()
+
+edmd_sys = LinearSystemDynamics(A=edmd_model.A, B=edmd_model.B)
+if (qd_closed_loop=="2 stages"):
+        edmd_controller_qd = MPCController(linear_dynamics=edmd_sys, 
+                            N=int(MPC_horizon_qd/dt),
+                            dt=dt, 
+                            umin=array([-umax_qd]), 
+                            umax=array([+umax_qd]),
+                            xmin=lower_bounds, 
+                            xmax=upper_bounds, 
+                            Q=Q_qd, 
+                            R=R, 
+                            QN=QN_qd, 
+                            lifting=True,
+                            edmd_object=edmd_model,
+                            xr=zeros(n))
+        edmd_controller_qd.eval(x_0, 0)
+        q_d_pred_edmd = edmd_controller_qd.parse_result()
+        figure()
+        title('Lin q_d')
+        for j in range(n):
+            subplot(n,1,j+1)
+            plot(t_eval, q_d_pred_edmd[j,:] , linewidth=2)
+            grid()
+        #show()
 
 # EDMD with MPC
-edmd_sys = LinearSystemDynamics(A=edmd_model.A, B=edmd_model.B)
 edmd_controller = MPCControllerDense(linear_dynamics=edmd_sys,
                                  N=int(MPC_horizon/dt),
                                  dt=dt,
@@ -517,7 +577,7 @@ edmd_controller = MPCControllerDense(linear_dynamics=edmd_sys,
                                  Q=Q,
                                  R=R,
                                  QN=QN,
-                                 xr=q_d_pred,
+                                 xr=q_d_pred_edmd,
                                  lifting=True,
                                  edmd_object=edmd_model,
                                  plotMPC=plotMPC,
@@ -535,8 +595,25 @@ if plotMPC:
 
 #KEEDMD MPC:
 keedmd_sys = LinearSystemDynamics(A=keedmd_model.A, B=keedmd_model.B)
+if (qd_closed_loop=="2 stages"):
+        keedmd_controller_qd = MPCController(linear_dynamics=keedmd_sys, 
+                            N=int(MPC_horizon_qd/dt),
+                            dt=dt, 
+                            umin=array([-umax_qd]), 
+                            umax=array([+umax_qd]),
+                            xmin=lower_bounds, 
+                            xmax=upper_bounds, 
+                            Q=Q_qd, 
+                            R=R, 
+                            QN=QN_qd, 
+                            lifting=True,
+                            edmd_object=keedmd_model,
+                            xr=zeros(n))
+        keedmd_controller_qd.eval(x_0, 0)
+        q_d_pred_keedmd = keedmd_controller_qd.parse_result()
+
 keedmd_controller = MPCControllerDense(linear_dynamics=keedmd_sys,
-                                     N=int(MPC_horizon / dt),
+                                     N=int(MPC_horizon/dt),
                                      dt=dt,
                                      umin=array([-umax_control]),
                                      umax=array([+umax_control]),
@@ -545,7 +622,7 @@ keedmd_controller = MPCControllerDense(linear_dynamics=keedmd_sys,
                                      Q=Q,
                                      R=R,
                                      QN=QN,
-                                     xr=q_d_pred,
+                                     xr=q_d_pred_keedmd,
                                      lifting=True,
                                      edmd_object=keedmd_model,
                                      plotMPC=plotMPC,
@@ -573,16 +650,28 @@ if save_traj:
 ylabels = ['$x$', '$\\theta$', '$\\dot{x}$', '$\\dot{\\theta}$']
 figure()
 for ii in range(n):
-    subplot(n, 1, ii+1)
-    plot(t_pred, q_d_pred[ii,:], linestyle="--",linewidth=2, label='reference')
-    plot(t_pred, xs_edmd_MPC[ii,:], linewidth=2, label='eDMD with MPC')
-    plot(t_pred, xs_keedmd_MPC[ii,:], linewidth=2, label='KEEDMD with MPC')
-    plot(t_pred, xs_lin_MPC[ii,:], linewidth=2, label='Linearized dynamics with MPC')
+    ax = subplot(n, 1, ii+1)
+    if (qd_closed_loop=="2 stages"):
+        plot(t_pred, q_d_pred_lin[ii,:], linestyle="--",color='blue',linewidth=2, label='ref lin')
+        plot(t_pred, q_d_pred_edmd[ii,:], linestyle="--",color='red',linewidth=2, label='ref edmd')
+        plot(t_pred, q_d_pred_keedmd[ii,:], linestyle="--",color='green',linewidth=2, label='ref keedmd')
+    else:
+        plot(t_pred, q_d_pred[ii,:], linestyle="--", color='blue',linewidth=2, label='reference')
+    plot(t_pred, xs_edmd_MPC[ii,:], linewidth=2,  color='red',label='eDMD with MPC')
+    plot(t_pred, xs_keedmd_MPC[ii,:], linewidth=2, color='green',label='KEEDMD with MPC')
+    plot(t_pred, xs_lin_MPC[ii,:], linewidth=2, color='blue',label='Linearized dynamics with MPC')
     xlabel('Time (s)')
     ylabel(ylabels[ii])
-    grid()
+    inset_end = True
+
     if ii == 0:
         title('Closed loop performance of different models')
+        if inset_end:
+            axinx = ax.inset_axes(2.5,loc=2)#[2.1,-0.1,2.2,+2.1])
+            axinx.set_xlim(1.95,2.05)
+            axinx.set_ylim(-0.1,0.5)
+            ax.indicate_inset_zoom(axinx)
+            grid()
 legend(fontsize=10, loc='best')
 savefig(closed_filename,format='pdf', dpi=2400)
 show()
