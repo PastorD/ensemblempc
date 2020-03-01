@@ -20,8 +20,8 @@ area = 0.04                                                 # Drone surface area
 gravity = 9.81                                              # Gravity (m/s^2)
 T_hover = mass*gravity                                      # Hover thrust (N)
 ground_altitude = 0.2                                       # Altitude corresponding to drone landed (m)
-#system = OneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
-system = LinearOneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
+system = OneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
+#system = LinearOneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
 
 # Define initial linearized model and ensemble of Bs (linearized around hover):
 A = np.array([[0., 1.], [0., 0.]])
@@ -51,17 +51,17 @@ ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
 
 #! Filter Parameters:
 eta = 0.6**2 # measurement covariance
-Nb = 7 # number of ensemble
+Nb = 3 # number of ensemble
 nk = 5 # number of steps for multi-step prediction
 B_ensemble = np.zeros((Ns,Nu,Nb))
 for i in range(Nb):
-    B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.normal()*0.5]])
+    B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.normal()*0.3]])
 
 E= np.array([0,-gravity*mass])
 #B_emsemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
 
 
-B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
+#B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
 #%%
 #! ===============================================   RUN EXPERIMENT    ================================================
 true_sys = LinearSystemDynamics(A, B_mean)
