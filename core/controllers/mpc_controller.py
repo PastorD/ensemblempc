@@ -202,8 +202,8 @@ class MPCController(Controller):
         self._osqp_result = self.prob.solve()
 
         # Check solver status
-        #if self._osqp_result.info.status != 'solved':
-        #    raise ValueError('OSQP did not solve the problem!')
+        if self._osqp_result.info.status != 'solved':
+            raise ValueError('OSQP did not solve the problem!')
 
         if self.plotMPC:
             self.plot_MPC(t, xr, tindex)
