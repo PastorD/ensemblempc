@@ -78,14 +78,14 @@ for ep in range(N_ep):
     traj_ep_tmp = []
     for i in range(Nb):
         lin_dyn = LinearSystemDynamics(A, B_ensemble[:,:,i])
-        ctrl_tmp = MPCController(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
+        ctrl_tmp = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
         ctrl_tmp.eval(z_0, 0)
-        traj_ep_tmp.append(ctrl_tmp.parse_result())
+        traj_ep_tmp.append(ctrl_tmp.get_state_prediction())
     traj_ep.append(traj_ep_tmp)
 
     # Design robust MPC with current ensemble of Bs and execute experiment:
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
-    controller = MPCController(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)  # TODO: Implement Robust MPC
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)  # TODO: Implement Robust MPC
     x_tmp, u_tmp = system.simulate(z_0, controller, t_eval)
     x_ep.append(x_tmp)
     xd_ep.append(np.transpose(ref).tolist())

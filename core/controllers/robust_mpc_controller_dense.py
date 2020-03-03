@@ -14,16 +14,8 @@ import matplotlib.cm as cm
 
 from .controller import Controller
 from ..learning.edmd import Edmd
+from .controller_aux import block_diag
 
-
-def block_diag(M,n):
-  """bd creates a sparse block diagonal matrix by repeating M n times
-  
-  Args:
-      M (2d numpy array): matrix to be repeated
-      n (float): number of times to repeat
-  """
-  return sparse.block_diag([M for i in range(n)])
 
 
 class RobustMpcDense(Controller):
@@ -38,6 +30,10 @@ class RobustMpcDense(Controller):
                 Q, R, QN, xr, plotMPC=False, plotMPC_filename="",lifting=False, edmd_object=None, name="noname", soft=False, D=None):
         """__init__ [summary]
         
+        osqp state: 
+        hard constraints [state row [Ns Nt], control [Nu Nt]]
+        soft constraints [state row [Ns Nt], control [Nu Nt], slack [2Ns Nt]]
+
         Arguments:
             linear_dynamics {dynamical sytem} -- it contains the A and B matrices in continous time
             N {integer} -- number of timesteps
@@ -76,8 +72,8 @@ class RobustMpcDense(Controller):
         else:
             self.C = sparse.eye(ns)
         lin_model_d = sp.signal.cont2discrete((Ac,Bc,self.C,zeros((ns,1))),dt)
-        Ad = sparse.csc_matrix(lin_model_d[0]) #TODO: If bad behavior, delete this
-        Bd = sparse.csc_matrix(lin_model_d[1]) #TODO: If bad behavior, delete this
+        Ad = sparse.csc_matrix(lin_model_d[0]) 
+        Bd = sparse.csc_matrix(lin_model_d[1]) 
         self.plotMPC = plotMPC
         self.plotMPC_filename = plotMPC_filename
         self.q_d = xr
@@ -316,14 +312,10 @@ class RobustMpcDense(Controller):
         - time, t, float
         '''
         time_eval0 = time.time()
-        N = self.N
-        nu = self.nu
-        nx = self.nx
-        ns = self.ns
+        N, ns, nu, nx = [self.N, self.ns, self.nu, self.nx]
+        self.x0 = x
 
-
-
-        tindex = int(np.ceil(t/self.dt))  #TODO: Remove ceil and add back +1 if bad performance
+        tindex = int(np.ceil(t/self.dt)) 
             
         #print("Eval at t={:.2f}, x={}".format(t,x))
         # Update the local reference trajectory
@@ -373,10 +365,15 @@ class RobustMpcDense(Controller):
             self.plot_MPC(t, x, xr, tindex)
 
         self.run_time = np.append(self.run_time,self._osqp_result.info.run_time)
+        self.uoutput = self._osqp_result.x[:nu]
+        return  self.uoutput
 
-        return  self._osqp_result.x[:nu]
+    def get_state_prediction(self):
+        u_flat = self._osqp_result.x
+        return np.reshape(self.a @ self.x0 + self.B @ u_flat,(self.N,self.nx)).T 
+ 
 
-    def parse_result(self,x,u):
+    def use_u(self,x,u):
         """parse_result obtain state from MPC optimization
         
         Arguments:
@@ -407,9 +404,7 @@ class RobustMpcDense(Controller):
         """
 
         #* Unpack OSQP results
-        nu = self.nu
-        nx = self.nx
-        N = self.N
+        N, ns, nu = [self.N, self.ns, self.nu]
 
         u_flat = self._osqp_result.x
         osqp_sim_state =  np.reshape(self.a @ x0 + self.B @ u_flat,(N,nx)).T

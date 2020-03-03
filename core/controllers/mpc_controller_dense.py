@@ -16,16 +16,6 @@ from .controller import Controller
 from ..learning.edmd import Edmd
 
 
-def block_diag(M,n):
-  """bd creates a sparse block diagonal matrix by repeating M n times
-  
-  Args:
-      M (2d numpy array): matrix to be repeated
-      n (float): number of times to repeat
-  """
-  return sparse.block_diag([M for i in range(n)])
-
-
 class MPCControllerDense(Controller):
     """
     Class for controllers MPC.
