@@ -373,7 +373,7 @@ class RobustMpcDense(Controller):
         return np.reshape(self.a @ self.x0 + self.B @ u_flat,(self.N,self.nx)).T 
  
 
-    def use_u(self,x,u):
+    def use_u(self,x,uraw):
         """parse_result obtain state from MPC optimization
         
         Arguments:
@@ -383,7 +383,8 @@ class RobustMpcDense(Controller):
         Returns:
             numpy array [Ns,N] -- state in the MPC optimization
         """
-        return  np.transpose(np.reshape( self.a @ x + self.B @ u, (self.N+1,self.nx)))
+        u = uraw.reshape(self.N*self.nu)
+        return  np.transpose(np.reshape( self.a @ x + self.B @ u, (self.N,self.nx)))
 
     def get_control_prediction(self):
         """get_control_prediction parse control command from MPC optimization

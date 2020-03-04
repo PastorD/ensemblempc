@@ -43,7 +43,7 @@ R = np.array([[1.]])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
-xmin=np.array([-10, -500.])
+xmin=np.array([ground_altitude, -500.])
 xmax=np.array([10., 5.])
 ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
@@ -55,16 +55,38 @@ Nb = 3 # number of ensemble
 nk = 5 # number of steps for multi-step prediction
 B_ensemble = np.zeros((Ns,Nu,Nb))
 for i in range(Nb):
-    B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.uniform(0.8,1.3)]])
+    B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.uniform(-0.5,0.5)]])
 
 E= np.array([0,-gravity*mass])
 B_emsemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
 
 
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
+true_sys = LinearSystemDynamics(A, B_mean)
+
+#! == Run limited experiment ============
+lin_dyn_mean = LinearSystemDynamics(A, B_mean)
+ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
+lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
+ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
+
+ctrl_tmp_mean.eval(z_0, 0)
+u_mean = ctrl_tmp_mean.get_control_prediction()
+z_mean = ctrl_tmp_mean.get_state_prediction()
+z_b = [ctrl_tmp_b[i].use_u(z_0,u_mean) for i in range(Nb)]
+
+t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
+plt.figure(figsize=(12,6))
+plt.plot(t_z, z_mean[0,:], linewidth=2, label=f'B {B_ensemble[:,:,i]}')
+for i in range(Nb):
+    plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
+plt.plot(t_z, ground_altitude*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z')
+plt.legend(loc='upper right')
+plt.show()
+
+
 #%%
 #! ===============================================   RUN EXPERIMENT    ================================================
-true_sys = LinearSystemDynamics(A, B_mean)
 inverse_kalman_filter = InverseKalmanFilter(A,B_mean, E, eta, B_ensemble, dt, nk )
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
