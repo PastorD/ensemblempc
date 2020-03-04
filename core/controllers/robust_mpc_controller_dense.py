@@ -14,8 +14,7 @@ import matplotlib.cm as cm
 
 from .controller import Controller
 from ..learning.edmd import Edmd
-from .controller_aux import block_diag
-
+from .controller_aux import block_diag, build_boldAB
 
 
 class RobustMpcDense(Controller):
@@ -71,9 +70,6 @@ class RobustMpcDense(Controller):
             self.edmd_object = edmd_object
         else:
             self.C = sparse.eye(ns)
-        lin_model_d = sp.signal.cont2discrete((Ac,Bc,self.C,zeros((ns,1))),dt)
-        Ad = sparse.csc_matrix(lin_model_d[0]) 
-        Bd = sparse.csc_matrix(lin_model_d[1]) 
         self.plotMPC = plotMPC
         self.plotMPC_filename = plotMPC_filename
         self.q_d = xr
@@ -98,13 +94,6 @@ class RobustMpcDense(Controller):
         x0 = np.zeros(nx)
         self.run_time = np.zeros([0,])
                
-
-        Rbd = sparse.kron(sparse.eye(N), R)
-        Qbd = sparse.kron(sparse.eye(N), Q)
-        Bbd = block_diag(Bd,nu).tocoo()
-
-
-
 
         # Check Xmin and Xmax
         if  xmin.shape[0]==ns and xmin.ndim==1: # it is a single vector we tile it
@@ -137,79 +126,21 @@ class RobustMpcDense(Controller):
         self.u_min_flat = u_min_flat 
         self.u_max_flat = u_max_flat 
 
-        #! GET a & b
-        # Write B:
-        diag_AkB = Bd
-        data_list = Bbd.data
-        row_list = Bbd.row
-        col_list = Bbd.col
-        B = sparse.coo_matrix
-        for i in range(N):
-            if i<N-1:
-                AkB_bd_temp = block_diag(diag_AkB,N-i)
-            else:
-                AkB_bd_temp = diag_AkB.tocoo()
-            data_list = np.hstack([data_list,AkB_bd_temp.data])
-            row_list  = np.hstack([row_list,AkB_bd_temp.row+np.full((AkB_bd_temp.row.shape[0],),nx*i)])
-            col_list  = np.hstack([col_list,AkB_bd_temp.col])
-
-            diag_AkB = Ad.dot(diag_AkB)            
-
-        B = sparse.coo_matrix((data_list, (row_list, col_list)), shape=(N*nx, N*nu))
-
-        a = Ad.copy()
-        Ak = Ad.copy()
-        for i in range(N-1):
-            Ak = Ak.dot(Ad)
-            a = sparse.vstack([a,Ak])    
-
         
+        lin_model_d = sp.signal.cont2discrete((Ac,Bc,self.C,zeros((ns,1))),dt)
+        Ad = sparse.csc_matrix(lin_model_d[0]) 
+        Bd = sparse.csc_matrix(lin_model_d[1]) 
+        
+        a,B = build_boldAB(Ad, Bd, N)
         self.a = a
         self.B = B
 
-        check_ab = True
-        if check_ab:
-            x0  = np.linspace(-5,40,nx)
-            x00 = np.linspace(-5,40,nx)
-            # Store data Init
-            nsim = N
-            xst = np.zeros((nx,nsim))
-            ust = np.zeros((nu,nsim))
+        #check_ab = True
+        #if check_ab:
 
-            # Simulate in closed loop
-
-            for i in range(nsim):
-                # Fake pd controller
-                ctrl = np.zeros(nu,) #np.random.rand(nu,)
-                x0 = Ad.dot(x0) + Bd.dot(ctrl)
-
-                # Store Data
-                xst[:,i] = x0
-                ust[:,i] = ctrl
-
-            x_dense = np.reshape(a @ x00 + B @ (ust.flatten('F')),(N,nx)).T
-
-            plt.figure()
-            plt.subplot(2,1,1)
-            for i in range(nx):
-                plt.plot(range(nsim),xst[i,:],'d',label="sim "+str(i))
-                plt.plot(range(nsim),x_dense[i,:],'d',label="ax+bu "+str(i))
-            plt.xlabel('Time(s)')
-            plt.grid()
-            plt.legend()
-
-            plt.subplot(2,1,2)
-            for i in range(nu):
-                plt.plot(range(nsim),ust[i,:],label=str(i))
-            plt.xlabel('Time(s)')
-            plt.grid()
-            plt.legend()
-            plt.savefig("AB_check_for_"+name+".pdf",bbox_inches='tight',format='pdf', dpi=2400)
-            plt.close()
-
-
-        # Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
- 
+        # Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1)) 
+        Rbd = sparse.kron(sparse.eye(N), R)
+        Qbd = sparse.kron(sparse.eye(N), Q)
 
         # Compute Block Diagonal elements
         self.Cbd = sparse.kron(sparse.eye(N), self.C)
