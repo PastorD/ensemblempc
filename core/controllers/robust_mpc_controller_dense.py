@@ -26,7 +26,9 @@ class RobustMpcDense(Controller):
     Use lifting=True to solve MPC in the lifted space
     """
     def __init__(self, linear_dynamics, N, dt, umin, umax, xmin, xmax, 
-                Q, R, QN, xr, plotMPC=False, plotMPC_filename="",lifting=False, edmd_object=None, name="noname", soft=False, D=None):
+                Q, R, QN, xr, plotMPC=False, plotMPC_filename="",
+                lifting=False, edmd_object=None, name="noname", soft=False, D=None,
+                ensemble=None):
         """__init__ [summary]
         
         osqp state: 
@@ -126,17 +128,22 @@ class RobustMpcDense(Controller):
         self.u_min_flat = u_min_flat 
         self.u_max_flat = u_max_flat 
 
-        
+        self.ensemble = ensemble
+        if ensemble is not None:
+            self.bA_e = []
+            self.bB_e = []
+            for i in range(ensemble.shape[2]):
+                lin_model_e = sp.signal.cont2discrete((Ac,Bc,self.C,zeros((ns,1))),dt)
+                Ad_e = sparse.csc_matrix(lin_model_e[0]) 
+                Bd_e = sparse.csc_matrix(lin_model_e[1]) 
+                a_temp, B_temp = build_boldAB( Ad_e, Bd_e, N)
+                self.bA_e.append(a_temp)
+                self.bB_e.append(B_temp)
+
         lin_model_d = sp.signal.cont2discrete((Ac,Bc,self.C,zeros((ns,1))),dt)
-        Ad = sparse.csc_matrix(lin_model_d[0]) 
-        Bd = sparse.csc_matrix(lin_model_d[1]) 
-        
-        a,B = build_boldAB(Ad, Bd, N)
+        a,B = build_boldAB( sparse.csc_matrix(lin_model_d[0]), sparse.csc_matrix(lin_model_d[1]) , N)
         self.a = a
         self.B = B
-
-        #check_ab = True
-        #if check_ab:
 
         # Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1)) 
         Rbd = sparse.kron(sparse.eye(N), R)
@@ -148,21 +155,33 @@ class RobustMpcDense(Controller):
         self.CtQ = self.C.T @ Q
         Cbd = self.Cbd
         
-            
+        # Compute quadratic cost matrix
         P = Rbd + B.T @ CQCbd @ B            
 
-            
+        # Compute linear cost vector
         self.BTQbda =  B.T @ CQCbd @ a            
-        Aineq_x = Cbd @ B
-
-        xrQB  = B.T @ np.reshape(self.CtQ.dot(xr),(N*nx,),order='F')
-        l = np.hstack([x_min_flat - Cbd @ a @ x0, u_min_flat])
-        u = np.hstack([x_max_flat - Cbd @ a @ x0, u_max_flat])
-
-        x0aQb = self.BTQbda @ x0
-        q = x0aQb - xrQB 
         Aineq_u = sparse.eye(N*nu)
-        A = sparse.vstack([Aineq_x, Aineq_u]).tocsc()
+        x0aQb = self.BTQbda @ x0
+        xrQB  = B.T @ np.reshape(self.CtQ.dot(xr),(N*nx,),order='F')
+        q = x0aQb - xrQB 
+
+        # Compute inequalities
+        if ensemble is not None:
+            l = u_min_flat
+            u = u_max_flat
+            for i in range(ensemble.shape[2]):
+                l = np.hstack([x_min_flat - Cbd @ self.bA_e[i] @ x0,l])
+                u = np.hstack([x_max_flat - Cbd @ self.bA_e[i] @ x0,u])
+
+            A = Aineq_u.tocsc()
+            for i in range(ensemble.shape[2]):
+                A = sparse.vstack([Cbd @ self.bB_e[i],A]).tocsc()
+        else:
+            l = np.hstack([x_min_flat - Cbd @ a @ x0, u_min_flat])
+            u = np.hstack([x_max_flat - Cbd @ a @ x0, u_max_flat])
+
+            Aineq_x = Cbd @ B
+            A = sparse.vstack([Aineq_x, Aineq_u]).tocsc()
 
         if soft:
             Pdelta = sparse.kron(sparse.eye(N), D)
@@ -215,10 +234,9 @@ class RobustMpcDense(Controller):
 
         # Create an OSQP object
         self.prob = osqp.OSQP()
+
         # Setup workspace
-
         self.prob.setup(P=P.tocsc(), q=q, A=A, l=l, u=u, warm_start=True, verbose=False)
-
 
         if self.plotMPC:
             # Figure to plot MPC thoughts
@@ -226,7 +244,7 @@ class RobustMpcDense(Controller):
             if nx==4:
                 ylabels = ['$x$', '$\\theta$', '$\\dot{x}$', '$\\dot{\\theta}$']
             else:
-                ylabels = [str(i) for i in range(nx)]
+                ylabels = [f"state {i}" for i in range(nx)]
 
             for ii in range(self.ns):
                 self.axs[ii].set(xlabel='Time(s)',ylabel=ylabels[ii])
@@ -234,7 +252,6 @@ class RobustMpcDense(Controller):
             for ii in range(self.ns,self.ns+self.nu):
                 self.axs[ii].set(xlabel='Time(s)',ylabel='u')
                 self.axs[ii].grid()
-
 
     def eval(self, x, t):
         '''
@@ -248,7 +265,6 @@ class RobustMpcDense(Controller):
 
         tindex = int(np.ceil(t/self.dt)) 
             
-        #print("Eval at t={:.2f}, x={}".format(t,x))
         # Update the local reference trajectory
         if (tindex+N) < self.Nqd: # if we haven't reach the end of q_d yet
             xr = self.q_d[:,tindex:tindex+N]
@@ -258,24 +274,30 @@ class RobustMpcDense(Controller):
         # Construct the new _osqp_q objects
         if (self.lifting):
             x = np.transpose(self.edmd_object.lift(x.reshape((x.shape[0],1)),xr[:,0].reshape((xr.shape[0],1))))[:,0]
-            #print("Eval at t={:.2f}, z={}".format(t,x))
 
-            #x = self.edmd_object.lift(x,xr[:,0])
             BQxr  = self.B.T @ np.reshape(self.CtQ.dot(xr),(N*nx,),order='F')
+        else:
+            BQxr  = self.B.T @ np.reshape(self.Q.dot(xr),(N*nx,),order='F')
+
+
+        if self.ensemble is not None:
+            l = self.u_min_flat
+            u = self.u_max_flat
+            for i in range(self.ensemble.shape[2]):
+                l = np.hstack([self.x_min_flat - self.Cbd @ self.bA_e[i] @ x,l])
+                u = np.hstack([self.x_max_flat - self.Cbd @ self.bA_e[i] @ x,u])
+        else:
             l = np.hstack([self.x_min_flat - self.Cbd @ self.a @ x, self.u_min_flat])
             u = np.hstack([self.x_max_flat - self.Cbd @ self.a @ x, self.u_max_flat])
 
-        else:
-            BQxr  = self.B.T @ np.reshape(self.Q.dot(xr),(N*nx,),order='F')
-            l = np.hstack([self.x_min_flat - self.a @ x, self.u_min_flat])
-            u = np.hstack([self.x_max_flat - self.a @ x, self.u_max_flat])
 
         # Update initial state
         BQax0 = self.BTQbda @ x
         q = BQax0  - BQxr
 
         if self.soft:
-            q = np.hstack([q,np.zeros(N*ns)])        
+            qdelta = np.zeros(N*ns)
+            q = np.hstack([q,qdelta])        
 
         self.prob.update(q=q,l=l,u=u)
 
@@ -289,7 +311,7 @@ class RobustMpcDense(Controller):
 
         # Check solver status
         if self._osqp_result.info.status != 'solved':
-            print('ERROR: MPC DENSE coudl not be solved at t ={}, x = {}'.format(t, x))
+            print(f'ERROR: MPC DENSE coudl not be solved at t ={t}, x = {x}')
             raise ValueError('OSQP did not solve the problem!')
 
         if self.plotMPC:

@@ -43,7 +43,7 @@ R = np.array([[1.]])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
-xmin=np.array([ground_altitude, -500.])
+xmin=np.array([ground_altitude, -10.])
 xmax=np.array([10., 5.])
 ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
@@ -53,12 +53,12 @@ ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
 eta = 0.6**2 # measurement covariance
 Nb = 3 # number of ensemble
 nk = 5 # number of steps for multi-step prediction
-B_ensemble = np.zeros((Ns,Nu,Nb))
-for i in range(Nb):
-    B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.uniform(-0.5,0.5)]])
+# B_ensemble = np.zeros((Ns,Nu,Nb))
+# for i in range(Nb):
+#     B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.uniform(-0.5,0.5)]])
 
-E= np.array([0,-gravity*mass])
-B_emsemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
+E = np.array([0,-gravity*mass])
+B_ensemble = np.stack([B_mean-np.array([[0.],[0.3]]), B_mean, B_mean+np.array([[0.],[0.3]])],axis=2)
 
 
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
@@ -66,7 +66,7 @@ true_sys = LinearSystemDynamics(A, B_mean)
 
 #! == Run limited experiment ============
 lin_dyn_mean = LinearSystemDynamics(A, B_mean)
-ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
+ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble)
 lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
 ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
 
@@ -77,11 +77,29 @@ z_b = [ctrl_tmp_b[i].use_u(z_0,u_mean) for i in range(Nb)]
 
 t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
 plt.figure(figsize=(12,6))
-plt.plot(t_z, z_mean[0,:], linewidth=2, label=f'B {B_ensemble[:,:,i]}')
+plt.subplot(3,1,1)
+plt.plot(t_z, z_mean[0,:], linewidth=3, label=f'B Mean {B_mean}')
 for i in range(Nb):
     plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
 plt.plot(t_z, ground_altitude*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z')
 plt.legend(loc='upper right')
+plt.grid()
+
+plt.subplot(3,1,2)
+plt.plot(t_z, z_mean[1,:], linewidth=3, label=f'B Mean {B_mean}')
+for i in range(Nb):
+    plt.plot(t_z, z_b[i][1,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
+plt.plot(t_z, xmin[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum \\dot{{z}}')
+plt.plot(t_z, xmax[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Maximum \\dot{{z}}')
+plt.legend(loc='upper right')
+plt.grid()
+
+plt.subplot(3,1,3)
+plt.plot(t_z,u_mean.T,label=f'U Mean')
+plt.plot(t_z, umin*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z')
+plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z')
+plt.legend(loc='upper right')
+plt.grid()
 plt.show()
 
 
