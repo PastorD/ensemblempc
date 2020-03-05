@@ -130,10 +130,11 @@ class RobustMpcDense(Controller):
 
         self.ensemble = ensemble
         if ensemble is not None:
+            self.Ne = ensemble.shape[2]
             self.bA_e = []
             self.bB_e = []
-            for i in range(ensemble.shape[2]):
-                lin_model_e = sp.signal.cont2discrete((Ac,Bc,self.C,zeros((ns,1))),dt)
+            for i in range(self.Ne):
+                lin_model_e = sp.signal.cont2discrete((Ac,ensemble[:,:,i],self.C,zeros((ns,1))),dt)
                 Ad_e = sparse.csc_matrix(lin_model_e[0]) 
                 Bd_e = sparse.csc_matrix(lin_model_e[1]) 
                 a_temp, B_temp = build_boldAB( Ad_e, Bd_e, N)
@@ -169,12 +170,12 @@ class RobustMpcDense(Controller):
         if ensemble is not None:
             l = u_min_flat
             u = u_max_flat
-            for i in range(ensemble.shape[2]):
+            for i in range(self.Ne ):
                 l = np.hstack([x_min_flat - Cbd @ self.bA_e[i] @ x0,l])
                 u = np.hstack([x_max_flat - Cbd @ self.bA_e[i] @ x0,u])
 
             A = Aineq_u.tocsc()
-            for i in range(ensemble.shape[2]):
+            for i in range(self.Ne ):
                 A = sparse.vstack([Cbd @ self.bB_e[i],A]).tocsc()
         else:
             l = np.hstack([x_min_flat - Cbd @ a @ x0, u_min_flat])
@@ -191,7 +192,7 @@ class RobustMpcDense(Controller):
             Adelta = sparse.csc_matrix(np.vstack([np.eye(N*ns),np.zeros((N*nu,N*ns))]))
             A = sparse.hstack([A, Adelta])
 
-        plot_matrices = False
+        plot_matrices = True
         if plot_matrices:
             #! Visualize Matrices
             fig = plt.figure()
@@ -228,9 +229,21 @@ class RobustMpcDense(Controller):
             plt.title("q in $J=u^TPu+q^Tu$")
             plt.grid()
             plt.tight_layout()
-            plt.savefig("MPC_matrices_for_"+name+".pdf",bbox_inches='tight',format='pdf', dpi=2400)
-            plt.close()
-            #plt.show()
+            #plt.savefig("MPC_matrices_for_"+name+".pdf",bbox_inches='tight',format='pdf', dpi=2400)
+            #plt.close()
+            plt.show()
+
+
+            if ensemble is not None:
+                fig = plt.figure()
+                for i in range(self.Ne):
+                    plt.subplot(self.Ne,1,i+1)
+                    plt.imshow(self.bB_e[i].toarray(),  interpolation='nearest', cmap=cm.Greys_r)
+                    plt.title(f"b in $x=ax_0+bu$ b={ensemble[1,0,i]}")
+
+
+                plt.show()
+
 
         # Create an OSQP object
         self.prob = osqp.OSQP()
@@ -283,7 +296,7 @@ class RobustMpcDense(Controller):
         if self.ensemble is not None:
             l = self.u_min_flat
             u = self.u_max_flat
-            for i in range(self.ensemble.shape[2]):
+            for i in range(self.Ne):
                 l = np.hstack([self.x_min_flat - self.Cbd @ self.bA_e[i] @ x,l])
                 u = np.hstack([self.x_max_flat - self.Cbd @ self.bA_e[i] @ x,u])
         else:
@@ -324,6 +337,11 @@ class RobustMpcDense(Controller):
     def get_state_prediction(self):
         u_flat = self._osqp_result.x
         return np.reshape(self.a @ self.x0 + self.B @ u_flat,(self.N,self.nx)).T 
+
+    def get_ensemble_state_prediction(self):
+        u_flat = self._osqp_result.x
+        z_b = [np.reshape(self.bA_e[i] @ self.x0 + self.bB_e[i] @ u_flat,(self.N,self.nx)).T  for i in range(self.Ne)]
+        return z_b
  
 
     def use_u(self,x,uraw):

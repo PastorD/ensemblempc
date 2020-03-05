@@ -64,16 +64,16 @@ B_ensemble = np.stack([B_mean-np.array([[0.],[0.3]]), B_mean, B_mean+np.array([[
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
 true_sys = LinearSystemDynamics(A, B_mean)
 
-#! == Run limited experiment ============
+#! == Run limited MPC Controller ============
 lin_dyn_mean = LinearSystemDynamics(A, B_mean)
 ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble)
-lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
-ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
+#lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
+#ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
 
 ctrl_tmp_mean.eval(z_0, 0)
 u_mean = ctrl_tmp_mean.get_control_prediction()
 z_mean = ctrl_tmp_mean.get_state_prediction()
-z_b = [ctrl_tmp_b[i].use_u(z_0,u_mean) for i in range(Nb)]
+z_b = ctrl_tmp_mean.get_ensemble_state_prediction()
 
 t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
 plt.figure(figsize=(12,6))
@@ -97,7 +97,7 @@ plt.grid()
 plt.subplot(3,1,3)
 plt.plot(t_z,u_mean.T,label=f'U Mean')
 plt.plot(t_z, umin*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z')
-plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z')
+plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Maximum z')
 plt.legend(loc='upper right')
 plt.grid()
 plt.show()
