@@ -34,7 +34,7 @@ z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
 t_max = 2.                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 5                                                   # Number of episodes
+N_ep = 10                                                   # Number of episodes
 
 # Model predictive controller parameters:
 Q = np.array([[1e4, 0.], [0., 1.]])
@@ -45,7 +45,7 @@ umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
 xmin=np.array([ground_altitude, -5.])
 xmax=np.array([10., 5.])
-ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
+ref = np.array([[ground_altitude+0.1 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
 
 
@@ -58,7 +58,7 @@ nk = 5 # number of steps for multi-step prediction
 #     B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.uniform(-0.5,0.5)]])
 
 E = np.array([0,-gravity*mass])
-B_ensemble = np.stack([B_mean-np.array([[0.],[0.3]]), B_mean, B_mean+np.array([[0.],[0.3]])],axis=2)
+B_ensemble = np.stack([B_mean-np.array([[0.],[0.4]]), B_mean, B_mean+np.array([[0.],[0.4]])],axis=2)
 
 
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
@@ -66,7 +66,7 @@ true_sys = LinearSystemDynamics(A, B_mean)
 
 #! == Run limited MPC Controller ============
 lin_dyn_mean = LinearSystemDynamics(A, B_mean)
-ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble)
+ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble,soft=True,D=1e3)
 #lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
 #ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
 
@@ -117,17 +117,17 @@ B_ep.append(B_ensemble) # B_ep[N_ep] of numpy array [Ns,Nu,Ne]
 for ep in range(N_ep):
     print(f"Episode {ep}")
     # Calculate predicted trajectories for each B in the ensemble:
-    traj_ep_tmp = []
-    for i in range(Nb):
-        lin_dyn = LinearSystemDynamics(A, B_ensemble[:,:,i])
-        ctrl_tmp = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
-        ctrl_tmp.eval(z_0, 0)
-        traj_ep_tmp.append(ctrl_tmp.get_state_prediction())
-    traj_ep.append(traj_ep_tmp)
+    # traj_ep_tmp = []
+    # for i in range(Nb):
+    #     lin_dyn = LinearSystemDynamics(A, B_ensemble[:,:,i])
+    #     ctrl_tmp = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
+    #     ctrl_tmp.eval(z_0, 0)
+    #     traj_ep_tmp.append(ctrl_tmp.get_state_prediction())
+    # traj_ep.append(traj_ep_tmp)
 
     # Design robust MPC with current ensemble of Bs and execute experiment:
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
-    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)  # TODO: Implement Robust MPC
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble)  
     x_tmp, u_tmp = system.simulate(z_0, controller, t_eval)
     x_ep.append(x_tmp)
     xd_ep.append(np.transpose(ref).tolist())
@@ -177,18 +177,18 @@ a0.grid()
 
 # - Plot predicted trajectories for 3 selected episodes:
 plot_ep = [0, int((N_ep-1)/2), N_ep-1]
-a_lst = []
-for ii in range(3):
-    a_lst.append(f1.add_subplot(gs1[1, ii]))
-    a_lst[ii].plot([t_eval[0], t_eval[-1]], [ground_altitude, ground_altitude], '--r', lw=2, label='Ground constraint')
-    a_lst[ii].plot(t_eval, traj_ep[plot_ep[ii], 0, 0, :], label='Min B')
-    a_lst[ii].plot(t_eval, traj_ep[plot_ep[ii], 1, 0, :], label='Mid B')
-    a_lst[ii].plot(t_eval, traj_ep[plot_ep[ii], 2, 0, :], label='Max B')
-    a_lst[ii].set_title('Predicted trajectories, ep ' + str(plot_ep[ii]))
-    a_lst[ii].set_xlabel('Time (sec)')
-    a_lst[ii].set_ylabel('z (m)')
-    a_lst[ii].grid()
-a_lst[-1].legend(loc='upper right')
+# a_lst = []
+# for ii in range(3):
+#     a_lst.append(f1.add_subplot(gs1[1, ii]))
+#     a_lst[ii].plot([t_eval[0], t_eval[-1]], [ground_altitude, ground_altitude], '--r', lw=2, label='Ground constraint')
+#     a_lst[ii].plot(t_eval, traj_ep[plot_ep[ii], 0, 0, :], label='Min B')
+#     a_lst[ii].plot(t_eval, traj_ep[plot_ep[ii], 1, 0, :], label='Mid B')
+#     a_lst[ii].plot(t_eval, traj_ep[plot_ep[ii], 2, 0, :], label='Max B')
+#     a_lst[ii].set_title('Predicted trajectories, ep ' + str(plot_ep[ii]))
+#     a_lst[ii].set_xlabel('Time (sec)')
+#     a_lst[ii].set_ylabel('z (m)')
+#     a_lst[ii].grid()
+# a_lst[-1].legend(loc='upper right')
 
 gs1.tight_layout(f1)
 f1.savefig('core/examples/results/b_ensemble.pdf', format='pdf', dpi=2400)
@@ -239,5 +239,5 @@ b2_lst[-1].legend(loc='upper right')
 
 gs2.tight_layout(f2)
 f2.savefig('core/examples/results/executed_traj.pdf', format='pdf', dpi=2400)
-
+plt.show()
 
