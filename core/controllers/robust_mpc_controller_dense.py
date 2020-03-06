@@ -55,7 +55,7 @@ class RobustMpcDense(Controller):
             edmd_object {edmd object} -- lifting object. It contains projection matrix and lifting function (default: {Edmd()})
             name {str} -- name for all saved files (default: {"noname"})
             soft {bool} -- flag to enable soft constraints (default: {False})
-            D {[type]} -- cost matrix for the soft variables (default: {None})
+            D {numpy array []} -- cost matrix for the soft variables (default: {None})
         """
 
         Controller.__init__(self, linear_dynamics)
@@ -192,7 +192,7 @@ class RobustMpcDense(Controller):
             Adelta = sparse.csc_matrix(np.vstack([np.eye(N*ns),np.zeros((N*nu,N*ns))]))
             A = sparse.hstack([A, Adelta])
 
-        plot_matrices = True
+        plot_matrices = False
         if plot_matrices:
             #! Visualize Matrices
             fig = plt.figure()
