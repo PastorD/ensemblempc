@@ -20,8 +20,8 @@ area = 0.04                                                 # Drone surface area
 gravity = 9.81                                              # Gravity (m/s^2)
 T_hover = mass*gravity                                      # Hover thrust (N)
 ground_altitude = 0.2                                       # Altitude corresponding to drone landed (m)
-system = OneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
-#system = LinearOneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
+#system = OneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
+system = LinearOneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
 
 # Define initial linearized model and ensemble of Bs (linearized around hover):
 A = np.array([[0., 1.], [0., 0.]])
@@ -43,8 +43,8 @@ R = np.array([[1.]])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
-xmin=np.array([ground_altitude, -10.])
-xmax=np.array([10., 10.])
+xmin=np.array([ground_altitude, -5.])
+xmax=np.array([10., 5.])
 ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
 
@@ -53,18 +53,60 @@ ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
 eta = 0.6**2 # measurement covariance
 Nb = 3 # number of ensemble
 nk = 5 # number of steps for multi-step prediction
-B_ensemble = np.zeros((Ns,Nu,Nb))
-for i in range(Nb):
-    B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.normal()*0.3]])
+# B_ensemble = np.zeros((Ns,Nu,Nb))
+# for i in range(Nb):
+#     B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.uniform(-0.5,0.5)]])
 
-E= np.array([0,-gravity*mass])
-#B_emsemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
+E = np.array([0,-gravity*mass])
+B_ensemble = np.stack([B_mean-np.array([[0.],[0.3]]), B_mean, B_mean+np.array([[0.],[0.3]])],axis=2)
 
 
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
+true_sys = LinearSystemDynamics(A, B_mean)
+
+#! == Run limited MPC Controller ============
+lin_dyn_mean = LinearSystemDynamics(A, B_mean)
+ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble)
+#lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
+#ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
+
+ctrl_tmp_mean.eval(z_0, 0)
+u_mean = ctrl_tmp_mean.get_control_prediction()
+z_mean = ctrl_tmp_mean.get_state_prediction()
+z_b = ctrl_tmp_mean.get_ensemble_state_prediction()
+
+t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
+f,axarr=plt.subplots(3, sharex=True)
+f.subplots_adjust(hspace=.1)
+#plt.figure(figsize=(12,6))
+plt.subplot(3,1,1,ylabel='Position')
+plt.plot(t_z, z_mean[0,:], linewidth=3, label=f'B Mean {B_mean}')
+for i in range(Nb):
+    plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
+plt.plot(t_z, ground_altitude*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z', color='gray')
+plt.legend(loc='upper right')
+plt.grid()
+
+plt.subplot(3,1,2, ylabel='Velocity')
+plt.plot(t_z, z_mean[1,:], linewidth=3, label=f'B Mean {B_mean}')
+for i in range(Nb):
+    plt.plot(t_z, z_b[i][1,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
+plt.plot(t_z, xmin[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
+plt.plot(t_z, xmax[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
+plt.legend(loc='upper right')
+plt.grid()
+
+plt.subplot(3,1,3, xlabel="Time(s)",ylabel='Control Input')
+plt.plot(t_z,u_mean.T,label=f'U Optimizing Mean Dynamics')
+plt.plot(t_z, umin*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
+plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
+plt.legend(loc='upper right')
+plt.grid()
+plt.show()
+
+
 #%%
 #! ===============================================   RUN EXPERIMENT    ================================================
-true_sys = LinearSystemDynamics(A, B_mean)
 inverse_kalman_filter = InverseKalmanFilter(A,B_mean, E, eta, B_ensemble, dt, nk )
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
@@ -78,14 +120,14 @@ for ep in range(N_ep):
     traj_ep_tmp = []
     for i in range(Nb):
         lin_dyn = LinearSystemDynamics(A, B_ensemble[:,:,i])
-        ctrl_tmp = MPCController(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
+        ctrl_tmp = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
         ctrl_tmp.eval(z_0, 0)
-        traj_ep_tmp.append(ctrl_tmp.parse_result())
+        traj_ep_tmp.append(ctrl_tmp.get_state_prediction())
     traj_ep.append(traj_ep_tmp)
 
     # Design robust MPC with current ensemble of Bs and execute experiment:
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
-    controller = MPCController(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)  # TODO: Implement Robust MPC
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)  # TODO: Implement Robust MPC
     x_tmp, u_tmp = system.simulate(z_0, controller, t_eval)
     x_ep.append(x_tmp)
     xd_ep.append(np.transpose(ref).tolist())
