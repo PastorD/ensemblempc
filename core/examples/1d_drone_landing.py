@@ -34,10 +34,10 @@ z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
 t_max = 2.                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 3                                                   # Number of episodes
+N_ep = 4                                                   # Number of episodes
 
 # Model predictive controller parameters:
-Q = np.array([[1e4, 0.], [0., 1.]])
+Q = np.array([[1e2, 0.], [0., 1.]])
 QN = Q
 R = np.array([[1.]])
 N_steps = int(t_max/dt)-1
@@ -156,8 +156,8 @@ x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.arr
 # Plot evolution of ensembles of B and predicted trajectories for each episode:
 
 def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep):
-    f2 = plt.figure(figsize=(15,9))
-    gs2 = gridspec.GridSpec(4,3, figure=f2)
+    f2 = plt.figure(figsize=(18,9))
+    gs2 = gridspec.GridSpec(5,3, figure=f2)
     
     # - Plot evolution of B ensemble:
     n_B = B_ep[0].shape[2]
@@ -196,7 +196,7 @@ def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep):
     b0.grid()
 
     # - Plot executed trajectories and control effort for each episode:
-    pos_plot, u_plot = [], []
+    pos_plot, u_plot, vel_plot = [], [], []
     N_e_summary = 3
     for ii in range(N_e_summary):
         pos_plot.append(f2.add_subplot(gs2[2, ii]))
@@ -213,16 +213,27 @@ def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep):
                     np.hstack([x_ep[plot_ep[ii]][index_time_ensemble,0],x_th_en[0,:]]), lw=0.5,c='k', alpha=0.5 )
 
         #b1_lst[ii].fill_between(t_eval, ref[0,:], x_ep[plot_ep[ii], :, 0], alpha=0.2)
-        #b1_lst[ii].plot(t_eval, x_ep[plot_ep[ii], :, 1], label='$\dot{z}$')
         err_norm = (t_eval[-1]-t_eval[0])*np.sum(np.square(x_ep[plot_ep[ii], :, 0].T - ref[0,:]))/x_ep[plot_ep[ii], :, 0].shape[0]
         #b1_lst[ii].text(1.2, 0.5, "$\int (z-z_d)^2=${0:.2f}".format(err_norm))
 
         pos_plot[ii].set_title('Executed trajectory, ep ' + str(plot_ep[ii]))
-        pos_plot[ii].set_xlabel('Time (sec)')
-        pos_plot[ii].set_ylabel('z, $\dot{z}$ (m, m/s)')
+        #pos_plot[ii].set_xlabel('Time (sec)')
+        pos_plot[ii].set_ylabel('z (m)')
         pos_plot[ii].grid()
 
-        u_plot.append(f2.add_subplot(gs2[3, ii]))
+        vel_plot.append(f2.add_subplot(gs2[3, ii]))
+        vel_plot[ii].plot(t_eval, x_ep[plot_ep[ii], :, 1], label='$\dot{z}$')
+        
+        for index_time_ensemble in ensemble_time_indices:
+            for x_th_en in x_th[plot_ep[ii]][index_time_ensemble]: # for every ensemble at time zero 
+                vel_plot[ii].plot(
+                    t_eval+t_eval[index_time_ensemble], 
+                    np.hstack([x_ep[plot_ep[ii]][index_time_ensemble,1],x_th_en[1,:]]), lw=0.5,c='k', alpha=0.5 )
+        vel_plot[ii].set_ylabel('$\dot{z}$ (m/s)')
+        vel_plot[ii].grid()
+
+
+        u_plot.append(f2.add_subplot(gs2[4, ii]))
         u_plot[ii].plot(t_eval[:-1], u_ep[plot_ep[ii], :, 0], label='T')
         u_plot[ii].plot([t_eval[0], t_eval[-2]], [umax+T_hover, umax+T_hover], '--r', lw=2, label='Max thrust')
 
