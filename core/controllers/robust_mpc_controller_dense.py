@@ -28,7 +28,8 @@ class RobustMpcDense(Controller):
     def __init__(self, linear_dynamics, N, dt, umin, umax, xmin, xmax, 
                 Q, R, QN, xr, plotMPC=False, plotMPC_filename="",
                 lifting=False, edmd_object=None, name="noname", soft=False, D=None,
-                ensemble=None):
+                ensemble=None,
+                gather_thoughts=True):
         """__init__ [summary]
         
         osqp state: 
@@ -95,6 +96,12 @@ class RobustMpcDense(Controller):
         self.N = N
         x0 = np.zeros(nx)
         self.run_time = np.zeros([0,])
+
+        # thoughts
+        self.gather_thoughts = gather_thoughts
+        if self.gather_thoughts: 
+            self.xe_th = []
+            self.u_th = []
                
 
         # Check Xmin and Xmax
@@ -332,6 +339,11 @@ class RobustMpcDense(Controller):
 
         self.run_time = np.append(self.run_time,self._osqp_result.info.run_time)
         self.uoutput = self._osqp_result.x[:nu]
+
+        if self.gather_thoughts:            
+            self.xe_th.append(self.get_ensemble_state_prediction())
+            self.u_th.append(self.get_control_prediction())
+
         return  self.uoutput
 
     def get_state_prediction(self):
@@ -356,6 +368,9 @@ class RobustMpcDense(Controller):
         """
         u = uraw.reshape(self.N*self.nu)
         return  np.transpose(np.reshape( self.a @ x + self.B @ u, (self.N,self.nx)))
+
+    def get_thoughts_traj(self):
+        return self.xe_th, self.u_th
 
     def get_control_prediction(self):
         """get_control_prediction parse control command from MPC optimization
@@ -453,9 +468,6 @@ class RobustMpcDense(Controller):
             P = Rbd + B.T @ Qbd @ B
             self.BTQbda =  B.T @ Qbd @ a
             self.prob.update(P=P,l=l,u=u) """
-
-        
-        
             
     def finish_plot(self, x, u, u_pd, time_vector, filename):
         """
