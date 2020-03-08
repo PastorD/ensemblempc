@@ -4,11 +4,18 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [        
+    
         {
-            "name": "Python: Module",
+            "name": "1D drone",
             "type": "python",
             "request": "launch",
             "module": "core.examples.1d_drone_landing"
+        },
+        {
+            "name": "Linestplay",
+            "type": "python",
+            "request": "launch",
+            "module": "core.examples.linear_estimation_playground"
         }
     ]
 }
