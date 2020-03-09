@@ -121,7 +121,7 @@ class InverseKalmanFilter(Learner):
         
         shrink_debug = True
         if (shrink_debug):
-            shrink_rate = 0.6
+            shrink_rate = 0.4
             B_mean = np.mean(self.B_ensemble,axis=2)
             self.new_ensamble = self.B_ensemble
             for i in range(self.Ne):
