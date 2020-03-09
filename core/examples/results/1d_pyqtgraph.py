@@ -22,14 +22,18 @@ t_eval = result['t_eval']
 x_ep = result['x_ep']
 x_th = result['x_th']
 u_th = result['u_th']
+u_ep = result['u_ep']
 ground_altitude = result['ground_altitude']
+T_hover = result['T_hover']
 
 ii = 0
 
+Nt = len(x_th[0])
+Ne = len(x_th[0][0])
 
 
 class Slider(QWidget):
-    def __init__(self, minimum, maximum, parent=None):
+    def __init__(self, minimum, maximum, variable, parent=None):
         super(Slider, self).__init__(parent=parent)
         self.verticalLayout = QVBoxLayout(self)
         self.label = QLabel(self)
@@ -47,6 +51,7 @@ class Slider(QWidget):
 
         self.minimum = minimum
         self.maximum = maximum
+        self.variable = variable
         self.slider.valueChanged.connect(self.setLabelValue)
         self.x = None
         self.setLabelValue(self.slider.value())
@@ -54,7 +59,7 @@ class Slider(QWidget):
     def setLabelValue(self, value):
         self.x = self.minimum + (float(value) / (self.slider.maximum() - self.slider.minimum())) * (
         self.maximum - self.minimum)
-        self.label.setText("{0:.4g}".format(self.x))
+        self.label.setText(f"{self.variable}: \n {int(self.x)}")
 
 
 class Widget(QWidget):
@@ -63,43 +68,59 @@ class Widget(QWidget):
 
         # Load Data
 
+        Nep = len(x_ep)
         self.horizontalLayout = QHBoxLayout(self)
-        self.w1 = Slider(0, 1.99)
+        self.w1 = Slider(0, Nep-1, 'Episode')
         self.horizontalLayout.addWidget(self.w1)
 
-        self.w2 = Slider(0, 198)
+        self.w2 = Slider(0, Nt-1, 't for pred')
         self.horizontalLayout.addWidget(self.w2)
-
-        self.w3 = Slider(0, 1.99)
-        self.horizontalLayout.addWidget(self.w3)
-
-        self.w4 = Slider(-10, 10)
-        self.horizontalLayout.addWidget(self.w4)
 
         self.win = pg.GraphicsWindow(title="EnMPC Analyzer")
         self.horizontalLayout.addWidget(self.win)
-        self.p6 = self.win.addPlot(title="Position(m)")
-        self.curve = self.p6.plot(pen='r')
-        #self.curve.setXRange(0,t_eval.max()*2)
-        self.p6.setRange(xRange=[0,t_eval.max()*2])
-        self.p6.setRange(yRange=[x_th.min()-0.1,x_th.max()+0.1])
+
+        
+        self.position_plot = self.win.addPlot(title="Position(m)")
+        self.position_plot.setRange(xRange=[0,t_eval.max()*2])
+        self.position_plot.setRange(yRange=[x_th.min()-0.1,x_th.max()+0.1])
+
+        self.velocity_plot = self.win.addPlot(title="Velocity(m/s)")
+        self.simvel = self.velocity_plot.plot(pen=pg.mkPen('b', width=5))
+        self.simvel.setData(t_eval[0,:],x_ep[ii][:,1])
+        self.vel_curve = [self.velocity_plot.plot(pen='r') for i in range(Ne)]
+
+        self.u_plot = self.win.addPlot(title="Input")
+        self.simu = self.u_plot.plot(pen=pg.mkPen('b', width=5))
+        self.simu.setData(t_eval[0,:-1],u_ep[ii][:,0])
+        self.u_curve = self.u_plot.plot(pen='r')
+
+        self.pos_curve = [self.position_plot.plot(pen='r') for i in range(Ne)]
+
+        self.simpos = self.position_plot.plot(pen=pg.mkPen('b', width=5))
+        self.simpos.setData(t_eval[0,:],x_ep[ii][:,0])
+        
         self.update_plot()
 
         self.w1.slider.valueChanged.connect(self.update_plot)
         self.w2.slider.valueChanged.connect(self.update_plot)
-        self.w3.slider.valueChanged.connect(self.update_plot)
-        self.w4.slider.valueChanged.connect(self.update_plot)
 
     def update_plot(self):
         ii = int(self.w1.x)
         step = int(self.w2.x)
-        en = int(self.w3.x)
-        d = self.w4.x
-        x = np.linspace(0, 10, 100)
-        #data = a + np.cos(x + c * np.pi / 180) * np.exp(-b * x) * d
+
         x_plot = t_eval[0,:]+t_eval[0,step] 
-        data = np.hstack([x_ep[ii][step,0],x_th[ii][step][en][0,:]])
-        self.curve.setData(x_plot,data)
+
+        
+        pos_data = [np.hstack([x_ep[ii][step,0],x_en[0,:]]) for x_en in x_th[ii][step]]
+        [curve_member.setData(x_plot,data_member) for curve_member, data_member in zip(self.pos_curve,pos_data)]
+
+
+        vel_data = [np.hstack([x_ep[ii][step,1],x_en[1,:]]) for x_en in x_th[ii][step]]
+        [curve_member.setData(x_plot,data_member) for curve_member, data_member in zip(self.vel_curve,vel_data)]
+
+        u_data = np.squeeze(u_th[ii][step][0,:]+T_hover)
+        self.u_curve.setData(x_plot[:-1],u_data)
+
 
 
 if __name__ == '__main__':

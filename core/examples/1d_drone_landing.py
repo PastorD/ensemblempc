@@ -3,9 +3,9 @@ from ..controllers import RobustMpcDense, MPCController, OpenLoopController
 from ..dynamics import SystemDynamics, LinearSystemDynamics
 from ..learning import InverseKalmanFilter
 
-import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from matplotlib import gridspec
+import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
 
@@ -35,7 +35,7 @@ z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
 t_max = 2.                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 2                                                   # Number of episodes
+N_ep = 5                                                   # Number of episodes
 
 # Model predictive controller parameters:
 Q = np.array([[1e2, 0.], [0., 1.]])
@@ -156,7 +156,7 @@ x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.arr
 
 # Plot evolution of ensembles of B and predicted trajectories for each episode:
 
-def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, x_th, u_th, ground_altitude,T_hover):
+def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, ground_altitude,T_hover):
     f2 = plt.figure(figsize=(18,9))
     gs2 = gridspec.GridSpec(5,3, figure=f2)
     
@@ -261,13 +261,14 @@ sp.io.savemat('./core/examples/1d_drone.mat', {'B_ep': B_ep,
                                                     'mpc_cost_ep':mpc_cost_ep,
                                                     't_eval':t_eval, 
                                                     'x_ep':x_ep,
+                                                    'u_ep':u_ep,
                                                     'x_th':x_th,
                                                     'u_th':u_th,
                                                     'ground_altitude':ground_altitude,
                                                     'T_hover':T_hover})
 
 
-plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, x_th, u_th, ground_altitude,T_hover)
+plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, ground_altitude,T_hover)
 
 
 def plot_interactive_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep):

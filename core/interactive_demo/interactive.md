@@ -43,9 +43,9 @@ It looks very good but it is slow
 pip install pyqt5 pyqtgraph
 ```
 
-It is very fast and the syntax is easy. 
+It is very fast and the syntax is easy.
 
-![pyqtgraph](pyqtgraph_slider.gif) 
+![pyqtgraph](pyqtgraph_slider.gif)
 
 # First Prototype to our problem
 
@@ -53,13 +53,18 @@ Based on the previous analysis, plotly and pyqtgraph were tested for our data:
 
 ## 1D Landing Plotly Example
 
-It is easy to plot one variable, but I struggled to plot more than one. It looks very slow even with only one variable
-![1d_plotly](1d_plotly.gif) 
+It is easy to plot one variable, but I struggled to plot more than one. It looks very slow even with only one variable. The slider controls the point in time to show the predictions.
+
+![1d_plotly](1d_plotly.gif)
 
 ## 1D Landing Pyqtgraph Example
 
-It was easy to change the plot and it is very fast
-![1d_pyqtgraph](1d_pyqtgraph.gif) 
+It was easy to change the plot and it is very fast. The second slider controls the point in time to show the predictions. The third slider controls the episode number.
 
+![1d_pyqtgraph](1d_pyqtgraph.gif)
 
-# 
+# EnMPC Analysis 0.1
+
+After the problems with plotly, we decided to implement the first version of the analyzer in Pyqtgraph. See below a video showing its operation. One slider controls episode number while the other slider controls the point along the trajectory to visualize the ensemble predictions. Note that for the input there is only one prediction.
+
+![1d_pyqtgraph_2](1d_pyqtgraph_2.gif)
