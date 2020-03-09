@@ -62,18 +62,33 @@ ii = 0
 fig = go.Figure()
 
 # Add traces, one for each slider step
-for step in range(0, 2):
+Nt = len(x_th[0])
+Ne = len(x_th[0][0])
+en = 0
+for step in range(Nt):
+    #y_plot = np.zeros(Nt,Ne)
+    x_plot = t_eval[0,:]+t_eval[0,step] 
+    #for x_th_en in x_th[ii][step]: # for every ensemble at time zero         
+    #    y_plot[:,] = np.vstack([y_plot,np.hstack([x_ep[ii][step,0],x_th_en[0,:]]) ])
+    y_plot = np.hstack([x_ep[ii][step,0],x_th[ii][step][en][0,:]])
     fig.add_trace( go.Scatter(
             visible=False,
-            line=dict(color="#00CED1", width=6),
-            name="episode " + str(step),
-            x=t_eval[0,:],
-            y=x_ep[0,:,step]))
+            line=dict(color="#00CED1", width=3),
+            name="ensemble " + str(en),
+            x=x_plot,
+            y=y_plot))
 #pos_plot.plot(t_eval, x_ep[ii, :, 0], label='z')
+
+fig.add_trace( go.Scatter(
+        visible=True,
+        line=dict(color="#AB63FA", width=4),
+        name="position ep" + str(ii),
+        x= t_eval[0,:],
+        y= x_ep[ii][:][0]))
+
 
 # Make 10th trace visible
 fig.data[0].visible = True
-
 
 # Create and add slider
 episode = []
@@ -93,7 +108,15 @@ sliders = [dict(
 )]
 
 fig.update_layout(
-    sliders=sliders
+    sliders=sliders,
+    xaxis = dict(
+      range=[0,t_eval.max()*2],  # sets the range of xaxis
+      constrain="domain",  # meanwhile compresses the xaxis by decreasing its "domain"
+    ),
+    yaxis = dict(
+      range=[x_th.min()-0.1,x_th.max()+0.1],  # sets the range of xaxis
+      constrain="domain", 
+    ),
 )
 
 fig.show()
