@@ -11,6 +11,8 @@ import scipy as sp
 from scipy.io import loadmat
 import matplotlib.pyplot as plt
 
+import random
+
 
 # Load Simulation Data
 #B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, x_th, u_th, ground_altitude = 
@@ -35,14 +37,14 @@ Ne = len(x_th[0][0])
 class Slider(QWidget):
     def __init__(self, minimum, maximum, variable, parent=None):
         super(Slider, self).__init__(parent=parent)
-        self.verticalLayout = QVBoxLayout(self)
+        self.verticalLayout = QHBoxLayout(self)
         self.label = QLabel(self)
         self.verticalLayout.addWidget(self.label)
-        self.horizontalLayout = QHBoxLayout()
+        self.horizontalLayout = QVBoxLayout()
         spacerItem = QSpacerItem(0, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.horizontalLayout.addItem(spacerItem)
         self.slider = QSlider(self)
-        self.slider.setOrientation(Qt.Vertical)
+        self.slider.setOrientation(Qt.Horizontal)
         self.horizontalLayout.addWidget(self.slider)
         spacerItem1 = QSpacerItem(0, 20, QSizePolicy.Expanding, QSizePolicy.Minimum)
         self.horizontalLayout.addItem(spacerItem1)
@@ -69,35 +71,40 @@ class Widget(QWidget):
         # Load Data
 
         Nep = len(x_ep)
-        self.horizontalLayout = QHBoxLayout(self)
+        self.horizontalLayout = QVBoxLayout(self)
         self.w1 = Slider(0, Nep-1, 'Episode')
         self.horizontalLayout.addWidget(self.w1)
 
-        self.w2 = Slider(0, Nt-1, 't for pred')
+        self.w2 = Slider(0, Nt-1, 'Time to plot MPC prediction')
         self.horizontalLayout.addWidget(self.w2)
 
         self.win = pg.GraphicsWindow(title="EnMPC Analyzer")
         self.horizontalLayout.addWidget(self.win)
 
-        
         self.position_plot = self.win.addPlot(title="Position(m)")
         self.position_plot.setRange(xRange=[0,t_eval.max()*2])
         self.position_plot.setRange(yRange=[x_th.min()-0.1,x_th.max()+0.1])
+        self.simpos = self.position_plot.plot(pen=pg.mkPen('b', width=5))
+        self.simpos.setData(t_eval[0,:],x_ep[ii][:,0])
+        self.pos_curve = [self.position_plot.plot(pen=pg.mkPen(color=(100, int(random.uniform(0,255)), 0))) for i in range(Ne)]
+        self.pos_point = self.position_plot.plot(pen='r', symbol='o',symbolSize=10) #, symbolBrush=(100, 100, 255, 50))
+
 
         self.velocity_plot = self.win.addPlot(title="Velocity(m/s)")
         self.simvel = self.velocity_plot.plot(pen=pg.mkPen('b', width=5))
         self.simvel.setData(t_eval[0,:],x_ep[ii][:,1])
-        self.vel_curve = [self.velocity_plot.plot(pen='r') for i in range(Ne)]
+        self.vel_curve = [self.velocity_plot.plot(pen=pg.mkPen(color=(255, int(random.uniform(0,255)), 0))) for i in range(Ne)]
+        self.vel_point = self.velocity_plot.plot(pen='r', symbol='o',symbolSize=10) #, symbolBrush=(100, 100, 255, 50))
+
 
         self.u_plot = self.win.addPlot(title="Input")
         self.simu = self.u_plot.plot(pen=pg.mkPen('b', width=5))
         self.simu.setData(t_eval[0,:-1],u_ep[ii][:,0])
         self.u_curve = self.u_plot.plot(pen='r')
+        self.u_point = self.u_plot.plot(pen='r', symbol='o',symbolSize=10) #, symbolBrush=(100, 100, 255, 50))
 
-        self.pos_curve = [self.position_plot.plot(pen='r') for i in range(Ne)]
 
-        self.simpos = self.position_plot.plot(pen=pg.mkPen('b', width=5))
-        self.simpos.setData(t_eval[0,:],x_ep[ii][:,0])
+
         
         self.update_plot()
 
@@ -113,13 +120,16 @@ class Widget(QWidget):
         
         pos_data = [np.hstack([x_ep[ii][step,0],x_en[0,:]]) for x_en in x_th[ii][step]]
         [curve_member.setData(x_plot,data_member) for curve_member, data_member in zip(self.pos_curve,pos_data)]
+        self.pos_point.setData(np.array([t_eval[0,step]]),np.array([x_ep[ii][step,0]]))
 
 
         vel_data = [np.hstack([x_ep[ii][step,1],x_en[1,:]]) for x_en in x_th[ii][step]]
         [curve_member.setData(x_plot,data_member) for curve_member, data_member in zip(self.vel_curve,vel_data)]
+        self.vel_point.setData(np.array([t_eval[0,step]]),np.array([x_ep[ii][step,1]]))
 
-        u_data = np.squeeze(u_th[ii][step][0,:]+T_hover)
+        u_data = np.squeeze(u_th[ii][step][0,:])
         self.u_curve.setData(x_plot[:-1],u_data)
+        self.u_point.setData(np.array([t_eval[0,step]]),np.array([u_ep[ii][step,0]]))
 
 
 
