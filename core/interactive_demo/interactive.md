@@ -68,3 +68,7 @@ It was easy to change the plot and it is very fast. The second slider controls t
 After the problems with plotly, we decided to implement the first version of the analyzer in Pyqtgraph. See below a video showing its operation. One slider controls episode number while the other slider controls the point along the trajectory to visualize the ensemble predictions. Note that for the input there is only one prediction.
 
 ![1d_pyqtgraph_2](1d_pyqtgraph_2.gif)
+
+If we activate the ground constrainst it will avoid the ground for all possible dynamics in the ensemble.
+
+![1d_pyqtgraph_enMPC](1d_pyqtgraph_enMCP.gif)
