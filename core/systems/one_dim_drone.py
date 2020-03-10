@@ -74,7 +74,7 @@ class OneDimDrone(RoboticDynamics):
             x = xs[j]
             if x[0] < self.ground_altitude:
                 x[0] = self.ground_altitude
-                x[1] = 0.
+                x[1] = -x[1]
 
             t = ts[j]
             u = controller.eval(x, t) + self.T_hover
