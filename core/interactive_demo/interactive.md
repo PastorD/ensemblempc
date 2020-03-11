@@ -10,7 +10,7 @@
 Google Trends Comparison:
 ![comparision](comparision.png)
 
-Plotly with by far the most popular, followed by Bokeh (I had to include the term python to all searches to avoid other meanings of Bokeh)
+Plotly is by far the most popular, followed by Bokeh (I had to include the term python to all searches to avoid other meanings of Bokeh)
 
 ## Plotly
 
@@ -18,12 +18,12 @@ Plotly with by far the most popular, followed by Bokeh (I had to include the ter
 pip install plotly
 ```
 
-It looks nice, easy to do simple things but harder for more complicated things
+It looks nice, easy to do simple things but harder for more complicated things [example](https://plot.ly/python/sliders/)
 
 ![plotly](plotly_slider.gif)
 
 ## Matplotlib
-It does not look good and it is slow, but it is the easiest to use
+It does not look good and it is slow, but it is the easiest to use [example](https://matplotlib.org/gallery/widgets/slider_demo.html)
 
 ![matplotlib](matplotlib_slider.gif)
 
@@ -33,7 +33,7 @@ It does not look good and it is slow, but it is the easiest to use
 pip install bokeh
 ```
 
-It looks very good but it is slow
+It looks very good but it is slow, [example](https://docs.bokeh.org/en/latest/docs/gallery/slider.html)
 
 ![bokeh](bokeh_slider.gif)
 
@@ -43,7 +43,7 @@ It looks very good but it is slow
 pip install pyqt5 pyqtgraph
 ```
 
-It is very fast and the syntax is easy.
+It is very fast and the syntax is easy, [example](https://stackoverflow.com/questions/42007434/slider-widget-for-pyqtgraph/42011414)
 
 ![pyqtgraph](pyqtgraph_slider.gif)
 
@@ -65,10 +65,10 @@ It was easy to change the plot and it is very fast. The second slider controls t
 
 # EnMPC Analysis 0.1
 
-After the problems with plotly, we decided to implement the first version of the analyzer in Pyqtgraph. See below a video showing its operation. One slider controls episode number while the other slider controls the point along the trajectory to visualize the ensemble predictions. Note that for the input there is only one prediction.
+After the problems with plotly, we decided to implement the first version of the analyzer in Pyqtgraph. See below a video showing its operation: blue shows the closed loop trajectory and red are the ensemble predictions. One slider controls episode number while the other slider controls the point along the trajectory to visualize the ensemble predictions. Note that for the input there is only one prediction.
 
 ![1d_pyqtgraph_2](1d_pyqtgraph_2.gif)
 
-If we activate the ground constrainst it will avoid the ground for all possible dynamics in the ensemble.
+If we activate the ground constraint it will avoid the ground for all possible dynamics in the ensemble. Note how the ensembles predictions crosses. 
 
 ![1d_pyqtgraph_enMPC](1d_pyqtgraph_enMCP.gif)
