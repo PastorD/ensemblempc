@@ -25,9 +25,13 @@ class RobustMpcDense(Controller):
 
     Use lifting=True to solve MPC in the lifted space
     """
-    def __init__(self, linear_dynamics, N, dt, umin, umax, xmin, xmax, 
-                Q, R, QN, xr, plotMPC=False, plotMPC_filename="",
-                lifting=False, edmd_object=None, name="noname", soft=False, D=None,
+    def __init__(self, linear_dynamics, N, dt, 
+                umin, umax, xmin, xmax, 
+                Q, R, QN, xr, 
+                plotMPC_filename=None,
+                edmd_object=None, 
+                name="noname", 
+                D=None,
                 ensemble=None,
                 gather_thoughts=True):
         """__init__ [summary]
@@ -66,26 +70,37 @@ class RobustMpcDense(Controller):
         [nx, nu] = Bc.shape
         ns = xr.shape[0]
 
-        #Discretize dynamics:
-        self.dt = dt
-        if lifting:
+        if edmd_object is not None:
             self.C = edmd_object.C
             self.edmd_object = edmd_object
+            self.lifting = True
         else:
+            self.lifting = False
             self.C = sparse.eye(ns)
-        self.plotMPC = plotMPC
-        self.plotMPC_filename = plotMPC_filename
-        self.q_d = xr
+            
+        if plotMPC_filename is not None:
+            self.plotMPC = True
+            self.plotMPC_filename = plotMPC_filename
+        else:
+            self.plotMPC = False
 
+        if D is not None:
+            self.soft = True
+            self.D = D
+        else:
+            self.soft = False
+
+        self.dt = dt
+        self.q_d = xr
 
         self.Q = Q
         self.R = R
-        self.lifting = lifting
 
         self.nu = nu
         self.nx = nx
         self.ns = ns
-        self.soft = soft
+        
+        
 
         # Total desired path
         if self.q_d.ndim==2:
@@ -191,13 +206,18 @@ class RobustMpcDense(Controller):
             Aineq_x = Cbd @ B
             A = sparse.vstack([Aineq_x, Aineq_u]).tocsc()
 
-        if soft:
-            Pdelta = sparse.kron(sparse.eye(N), D)
-            P = sparse.block_diag([P,Pdelta])
-            qdelta = np.zeros(N*ns)
-            q = np.hstack([q,qdelta])
-            Adelta = sparse.csc_matrix(np.vstack([np.eye(N*ns),np.zeros((N*nu,N*ns))]))
+        if self.soft:
+            if ensemble is not None:
+                Nineq = N*self.Ne
+            else:
+                Nineq = N
+            self.Nineq = Nineq
+            Pdelta = sparse.kron(sparse.eye(Nineq), D)
+            qdelta = np.zeros(Nineq*ns)
+            Adelta = sparse.csc_matrix(np.vstack([np.eye(Nineq*ns),np.zeros((N*nu,Nineq*ns))]))
             A = sparse.hstack([A, Adelta])
+            q = np.hstack([q,qdelta])
+            P = sparse.block_diag([P,Pdelta])
 
         plot_matrices = False
         if plot_matrices:
@@ -316,7 +336,7 @@ class RobustMpcDense(Controller):
         q = BQax0  - BQxr
 
         if self.soft:
-            qdelta = np.zeros(N*ns)
+            qdelta = np.zeros(self.Nineq*ns)
             q = np.hstack([q,qdelta])        
 
         self.prob.update(q=q,l=l,u=u)
@@ -347,11 +367,11 @@ class RobustMpcDense(Controller):
         return  self.uoutput
 
     def get_state_prediction(self):
-        u_flat = self._osqp_result.x
+        u_flat = self._osqp_result.x[:self.nu*self.N]
         return np.reshape(self.a @ self.x0 + self.B @ u_flat,(self.N,self.nx)).T 
 
     def get_ensemble_state_prediction(self):
-        u_flat = self._osqp_result.x
+        u_flat = self._osqp_result.x[:self.nu*self.N]
         z_b = [np.reshape(self.bA_e[i] @ self.x0 + self.bB_e[i] @ u_flat,(self.N,self.nx)).T  for i in range(self.Ne)]
         return z_b
  

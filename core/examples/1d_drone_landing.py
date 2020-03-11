@@ -33,18 +33,19 @@ Nu = B_mean.shape[1]
 # Define simulation parameters:
 z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
-t_max = 2.                                                  # End time (sec)
+t_max = 2.5                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 5                                                   # Number of episodes
+N_ep = 6                                                   # Number of episodes
 
 # Model predictive controller parameters:
-Q = np.array([[1e2, 0.], [0., 1.]])
+Q = np.array([[1e4, 0.], [0., 1.]])
 QN = Q
 R = np.array([[1.]])
+Dmatrix = sp.sparse.diags([50000,30000])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
-xmin=np.array([-20., -20.])
+xmin=np.array([ground_altitude, -5.])
 xmax=np.array([10., 5.])
 ref = np.array([[ground_altitude+0.1 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
@@ -59,7 +60,7 @@ nk = 5 # number of steps for multi-step prediction
 #     B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.uniform(-0.5,0.5)]])
 
 E = np.array([0,-gravity*mass])
-B_ensemble = np.stack([B_mean-np.array([[0.],[0.4]]), B_mean, B_mean+np.array([[0.],[0.4]])],axis=2)
+B_ensemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
 
 
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
@@ -67,43 +68,43 @@ true_sys = LinearSystemDynamics(A, B_mean)
 
 #! == Run limited MPC Controller ============
 
-# lin_dyn_mean = LinearSystemDynamics(A, B_mean)
-# ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble)
-# #lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
-# #ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
+lin_dyn_mean = LinearSystemDynamics(A, B_mean)
+ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ensemble, D=Dmatrix)
+#lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
+#ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
 
-# ctrl_tmp_mean.eval(z_0, 0)
-# u_mean = ctrl_tmp_mean.get_control_prediction()
-# z_mean = ctrl_tmp_mean.get_state_prediction()
-# z_b = ctrl_tmp_mean.get_ensemble_state_prediction()
+ctrl_tmp_mean.eval(z_0, 0)
+u_mean = ctrl_tmp_mean.get_control_prediction()
+z_mean = ctrl_tmp_mean.get_state_prediction()
+z_b = ctrl_tmp_mean.get_ensemble_state_prediction()
 
-# t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
-# f,axarr=plt.subplots(3, sharex=True)
-# f.subplots_adjust(hspace=.1)
-# #plt.figure(figsize=(12,6))
-# plt.subplot(3,1,1,ylabel='Position')
-# plt.plot(t_z, z_mean[0,:], linewidth=3, label=f'B Mean {B_mean}')
-# for i in range(Nb):
-#     plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
-# plt.plot(t_z, ground_altitude*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z', color='gray')
-# plt.legend(loc='upper right')
-# plt.grid()
+t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
+f,axarr=plt.subplots(3, sharex=True)
+f.subplots_adjust(hspace=.1)
+#plt.figure(figsize=(12,6))
+plt.subplot(3,1,1,ylabel='Position')
+plt.plot(t_z, z_mean[0,:], linewidth=3, label=f'B Mean {B_mean}')
+for i in range(Nb):
+    plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
+plt.plot(t_z, ground_altitude*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z', color='gray')
+plt.legend(loc='upper right')
+plt.grid()
 
-# plt.subplot(3,1,2, ylabel='Velocity')
-# plt.plot(t_z, z_mean[1,:], linewidth=3, label=f'B Mean {B_mean}')
-# for i in range(Nb):
-#     plt.plot(t_z, z_b[i][1,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
-# plt.plot(t_z, xmin[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-# plt.plot(t_z, xmax[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-# plt.legend(loc='upper right')
-# plt.grid()
+plt.subplot(3,1,2, ylabel='Velocity')
+plt.plot(t_z, z_mean[1,:], linewidth=3, label=f'B Mean {B_mean}')
+for i in range(Nb):
+    plt.plot(t_z, z_b[i][1,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
+plt.plot(t_z, xmin[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
+plt.plot(t_z, xmax[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
+plt.legend(loc='upper right')
+plt.grid()
 
-# plt.subplot(3,1,3, xlabel="Time(s)",ylabel='Control Input')
-# plt.plot(t_z,u_mean.T,label=f'U Optimizing Mean Dynamics')
-# plt.plot(t_z, umin*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-# plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-# plt.legend(loc='upper right')
-# plt.grid()
+plt.subplot(3,1,3, xlabel="Time(s)",ylabel='Control Input')
+plt.plot(t_z,u_mean.T,label=f'U Optimizing Mean Dynamics')
+plt.plot(t_z, umin*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
+plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
+plt.legend(loc='upper right')
+plt.grid()
 #plt.show()
 
 
@@ -129,7 +130,7 @@ for ep in range(N_ep):
 
     # Design robust MPC with current ensemble of Bs and execute experiment:
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
-    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble)  
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)  
     x_tmp, u_tmp = system.simulate(z_0, controller, t_eval) 
     x_th_tmp, u_th_tmp = controller.get_thoughts_traj()
     x_th.append(x_th_tmp) # x_th[Nep][Nt][Ne] [Ns,Np]_NumpyArray
