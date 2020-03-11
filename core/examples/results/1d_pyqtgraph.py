@@ -80,6 +80,7 @@ class Widget(QWidget):
 
         self.win = pg.GraphicsWindow(title="EnMPC Analyzer")
         self.horizontalLayout.addWidget(self.win)
+        self.win.setBackground('w')
 
         self.position_plot = self.win.addPlot(title="Position(m)")
         self.position_plot.setRange(xRange=[0,t_eval.max()*2])
@@ -88,20 +89,25 @@ class Widget(QWidget):
         self.simpos.setData(t_eval[0,:],x_ep[ii][:,0])
         self.pos_curve = [self.position_plot.plot(pen=pg.mkPen(color=(100, int(random.uniform(0,255)), 0))) for i in range(Ne)]
         self.pos_point = self.position_plot.plot(pen='r', symbol='o',symbolSize=10) #, symbolBrush=(100, 100, 255, 50))
-
+        self.position_plot.showGrid(x=True, y=True)
 
         self.velocity_plot = self.win.addPlot(title="Velocity(m/s)")
         self.simvel = self.velocity_plot.plot(pen=pg.mkPen('b', width=5))
         self.simvel.setData(t_eval[0,:],x_ep[ii][:,1])
         self.vel_curve = [self.velocity_plot.plot(pen=pg.mkPen(color=(255, int(random.uniform(0,255)), 0))) for i in range(Ne)]
         self.vel_point = self.velocity_plot.plot(pen='r', symbol='o',symbolSize=10) #, symbolBrush=(100, 100, 255, 50))
+        self.velocity_plot.showGrid(x=True, y=True)
+        #self.velocity_plot.setBackground('w')
+
 
 
         self.u_plot = self.win.addPlot(title="Input")
+        #self.u_plot.setBackground('w')
         self.simu = self.u_plot.plot(pen=pg.mkPen('b', width=5))
         self.simu.setData(t_eval[0,:-1],u_ep[ii][:,0])
         self.u_curve = self.u_plot.plot(pen='r')
         self.u_point = self.u_plot.plot(pen='r', symbol='o',symbolSize=10) #, symbolBrush=(100, 100, 255, 50))
+        self.u_plot.showGrid(x=True, y=True)
 
 
 
