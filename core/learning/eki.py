@@ -204,9 +204,16 @@ class EKI():
             error = np.sqrt(error_v.dot(error_v))
             print(f'Iteration EKI {j+1}/{self.maxiter}. Error {error:.2f}')
             print(f"xe {xe}")
+            print(f"ubar {ubar}")
 
 
 
             #if (abs(error) < self.max_error):
             #    break
+        self.ubar = ubar
+        self.cov_theta = Cuu
         return xe
+    def get_Cov_theta(self, xe):
+        ubar = np.mean(xe,axis=1,keepdims=True) # keepdims so it can be substracted to xe
+        u_d = xe - ubar
+        return u_d @ u_d.T 

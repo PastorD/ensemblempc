@@ -7,21 +7,40 @@ from scipy.integrate import solve_ivp
 
 
 def simulate(A,Bmean,Emean,sigmaB,sigmaE,T=100,dt=.1):
+    """
+    Simulate linear dynamics system
+    
+    Arguments:
+        A {numpy array [n,n]} -- A in xdot = Ax+Bu+E
+        Bmean {numpy array [n,m]} -- 
+        Emean {numpy array [n,]} -- E
+        sigmaB {float>0} -- standard deviation for B
+        sigmaE {float>0} -- [description]
+    
+    Keyword Arguments:
+        T {int>0} -- number of timesteps (default: {100})
+        dt {float>0} -- timestep (default: {.1})
+    
+    Returns:
+        [type] -- [description]
+    """
 
     Ns = Bmean.shape[0]
     Nu = Bmean.shape[1]
     
     X = np.zeros((Ns,T))
     u = np.random.normal(size=(Nu,T))
+    Bcollect = []
     for j in range(1,T):
         # Simulate dynamics
         B = Bmean + sigmaB @ np.random.randn(Ns,Nu)
         E = Emean + sigmaE @ np.random.randn(Ns)
         f = lambda t,x: A@x + B@u[:,j] + E
         X[:,j] = solve_ivp(f, [0, dt], X[:,j-1]).y[:, -1]
+        Bcollect.append(B)
         
     t = np.linspace(0,dt*T,T)
-    return X, u, t
+    return X, u, t, Bcollect
 
 A_mean = np.array([[0., 1.], [0., 0.]])
 B_mean = np.array([[0.],[1]])
@@ -33,22 +52,31 @@ sigmaE = np.diag([0.0,0.0])
 
 
 dt = 0.01
-Ntraj = 20 
-X, U = [],[]
+Ntraj = 10 
+X, U, B = [],[], []
 for i in range(Ntraj):
-    X_temp, U_temp, t_temp = simulate(A_mean,B_mean,E_mean,sigmaB,sigmaE,dt=dt)
+    X_temp, U_temp, t_temp, B_temp = simulate(A_mean,B_mean,E_mean,sigmaB,sigmaE,dt=dt)
     X.append(X_temp)
     U.append(U_temp)
+    B.append(B_temp)
     
 print(len(X))
 eta_0 = 0.1
-Ne = 5
+Nen = 5
 bspread = 0.6
-B_0 = [B_mean + np.random.randn(Ns,Nu)*bspread for i in range(Ne)]
-#eki = InverseKalmanFilter(A_mean,B_mean,E_mean,eta_0,B_0,dt=dt,nk=0)
-#eki.fit(X, X_dot=None,U=U)
-#cov_B = eki.get_Cov_theta()
-#print(f"$\sigma_B:${sigmaB[1]} vs recovered:{cov_B[0]}")
+B_0 = np.zeros((Ns,Nu,Nen))
+for i in range(Nen):
+    B_0[:,:,i] = B_mean+np.random.randn(Ns,Nu)*bspread
+    #B_0 = [B_mean + np.random.randn(Ns,Nu)*bspread for i in range(Ne)]
+    
+plt.hist([B[j][i][1,0] for i in range(99) for j in range(Ntraj)],bins=50)
+plt.show()
+eki = InverseKalmanFilter(A_mean,B_mean,E_mean,eta_0,B_0,dt=dt,nk=10)
+eki.fit(X, X_dot=None,U=U)
+cov_B = eki.eki.cov_theta
+B_reco = np.mean(eki.B_ensemble_flat,axis=1)
+print(f"B:{B_mean[1]} vs recovered:{B_reco[1]}")
+print(f"sigma B:{sigmaB[1]} vs recovered:{cov_B[1,1]}")
 
 
     
