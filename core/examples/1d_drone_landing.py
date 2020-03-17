@@ -1,13 +1,14 @@
 from ..systems import OneDimDrone, LinearOneDimDrone
 from ..controllers import RobustMpcDense, MPCController, OpenLoopController
 from ..dynamics import SystemDynamics, LinearSystemDynamics
-from ..learning import InverseKalmanFilter
+from ..learning import InverseKalmanFilter, KoopmanEigenfunctions, Keedmd
 
 from matplotlib.ticker import MaxNLocator
 from matplotlib import gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
+from control import lqr
 
 #%%
 print("Starting 1D Drone Landing Simulation..")
@@ -50,20 +51,49 @@ xmax=np.array([10., 5.])
 ref = np.array([[ground_altitude+0.1 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
 
-#! Filter Parameters:
+# Filter Parameters:
 eta = 0.6**2 # measurement covariance
 Nb = 3 # number of ensemble
 nk = 5 # number of steps for multi-step prediction
-# B_ensemble = np.zeros((Ns,Nu,Nb))
-# for i in range(Nb):
-#     B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.uniform(-0.5,0.5)]])
-
 E = np.array([0,-gravity*mass])
 B_ensemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
-
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
 true_sys = LinearSystemDynamics(A, B_mean)
 
+# KEEDMD Parameters:
+# - Koopman eigenfunction parameters
+eigenfunction_max_power = 5                             # Max power of variables in eigenfunction products
+l2_diffeomorphism = 0.0                                 # l2 regularization strength
+jacobian_penalty_diffeomorphism = 1e1                   # Estimator jacobian regularization strength
+diff_n_epochs = 100                                     # Number of epochs
+diff_train_frac = 0.9                                   # Fraction of data to be used for training
+diff_n_hidden_layers = 2                                # Number of hidden layers
+diff_layer_width = 25                                   # Number of units in each layer
+diff_batch_size = 32                                    # Batch size
+diff_learn_rate = 0.06842                               # Leaning rate
+diff_learn_rate_decay = 0.95                            # Learning rate decay
+diff_dropout_prob = 0.25                                # Dropout rate
+
+# - EDMD Regularization Parameters:
+l1_pos_keedmd = 2.959346801305389e-05                   # l1 regularization strength for position states
+l1_pos_ratio_keedmd = 1.0                               # l1-l2 ratio for position states
+l1_vel_keedmd = 0.01699292625990855                     # l1 regularization strength for velocity states
+l1_vel_ratio_keedmd = 1.0                               # l1-l2 ratio for velocity states
+l1_eig_keedmd = 0.07540177706202959                     # l1 regularization strength for eigenfunction states
+l1_eig_ratio_keedmd = 0.1                               # l1-l2 ratio for eigenfunction states
+
+Neig = (eigenfunction_max_power+1)**Ns-1
+E_keedmd = np.array([0,-gravity*mass])
+E_keedmd = np.concatenate((E_keedmd, np.zeros(Neig)))
+B_mean_keedmd = np.concatenate((B_mean, np.zeros((Neig, Nu))))
+B_ensemble_keedmd = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
+B_ensemble_keedmd = np.stack([np.concatenate((B_ensemble_keedmd[:,:,0], np.zeros((Neig,Nu)))),
+                                B_mean_keedmd,
+                                np.concatenate((B_ensemble_keedmd[:,:,2], np.zeros((Neig,Nu))))], axis=2)
+A_keedmd = np.zeros((Neig+Ns, Neig+Ns))
+A_keedmd[:Ns,:Ns] = A
+K, _, _ = lqr(A, B_mean, Q, R)
+K_p, K_d = K[:,:int(Ns/2)], K[:,int(Ns/2):]
 
 #! ================================================ Run limited MPC Controller ===========================================
 
@@ -110,11 +140,21 @@ plt.grid()
 #%%
 #! ===============================================   RUN EXPERIMENT    ================================================
 inverse_kalman_filter = InverseKalmanFilter(A, B_mean, E, eta, B_ensemble, dt, nk)
+inverse_kalman_filter_keedmd = InverseKalmanFilter(A_keedmd, B_mean_keedmd, E_keedmd, eta, B_ensemble_keedmd, dt, nk)
+
+A_cl = A - np.dot(B_mean, np.concatenate((K_p, K_d),axis=1))
+BK = np.dot(B_mean, np.concatenate((K_p, K_d),axis=1))
+eigenfunction_basis = KoopmanEigenfunctions(n=Ns, max_power=eigenfunction_max_power, A_cl=A_cl, BK=BK)
+eigenfunction_basis.build_diffeomorphism_model(jacobian_penalty=jacobian_penalty_diffeomorphism, n_hidden_layers = diff_n_hidden_layers, layer_width=diff_layer_width, batch_size= diff_batch_size, dropout_prob=diff_dropout_prob)
+# TODO: Initialize KEEDMD object (make new function in KEEDMD class for initializing A, B, C)
+keedmd_model = None
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
+x_ep_keedmd, xd_ep_keedmd, u_ep_keedmd, traj_ep_keedmd, B_ep_keedmd, mpc_cost_ep_keedmd, t_ep_keedmd = [], [], [], [], [], [], []
 x_th, u_th  = [], []
 # B_ensemble [Ns,Nu,Ne] numpy array
 B_ep.append(B_ensemble) # B_ep[N_ep] of numpy array [Ns,Nu,Ne]
+B_ep_keedmd.append(B_ensemble_keedmd) # B_ep[N_ep] of numpy array [Ns+Neig,Nu,Ne]
 
 for ep in range(N_ep):
     print(f"Episode {ep}")
@@ -127,9 +167,9 @@ for ep in range(N_ep):
     #     traj_ep_tmp.append(ctrl_tmp.get_state_prediction())
     # traj_ep.append(traj_ep_tmp)
 
-    # Design robust MPC with current ensemble of Bs and execute experiment:
+    # Design robust MPC with current ensemble of Bs and execute experiment state space model:
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
-    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)  
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ensemble, D=Dmatrix)
     x_tmp, u_tmp = system.simulate(z_0, controller, t_eval) 
     x_th_tmp, u_th_tmp = controller.get_thoughts_traj()
     x_th.append(x_th_tmp) # x_th[Nep][Nt][Ne] [Ns,Np]_NumpyArray
@@ -139,17 +179,46 @@ for ep in range(N_ep):
     u_ep.append(u_tmp) # u_ep [Nep][Nt] [Nu,]_NumpyArray
     t_ep.append(t_eval.tolist()) # t_ep [Nep][Nt+1,]_NumpyArray
     mpc_cost_ep.append(np.sum(np.diag((x_tmp[:-1,:].T-ref[:,:-1]).T@Q@(x_tmp[:-1,:].T-ref[:,:-1]) + u_tmp@R@u_tmp.T)))
+
+    # Design robust MPC with current ensemble of Bs and execute experiment with KEEDMD model:
+    lifted_dyn = LinearSystemDynamics(A_keedmd, B_ep_keedmd[-1][:, :, 1])
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ensemble, D=Dmatrix, edmd_object=keedmd_model)
+    x_tmp, u_tmp = system.simulate(z_0, controller, t_eval)
+    x_th_tmp, u_th_tmp = controller.get_thoughts_traj()
+    x_th.append(x_th_tmp)  # x_th[Nep][Nt][Ne] [Ns,Np]_NumpyArray
+    u_th.append(u_th_tmp)  # u_th [Nep][Nt] [Nu,Np]_NumpyArray
+    x_ep.append(x_tmp)  # x_ep [Nep][Nt+1] [Ns,]_NumpyArray
+    xd_ep.append(np.transpose(ref).tolist())
+    u_ep.append(u_tmp)  # u_ep [Nep][Nt] [Nu,]_NumpyArray
+    t_ep.append(t_eval.tolist())  # t_ep [Nep][Nt+1,]_NumpyArray
+    mpc_cost_ep.append(
+        np.sum(np.diag((x_tmp[:-1, :].T - ref[:, :-1]).T @ Q @ (x_tmp[:-1, :].T - ref[:, :-1]) + u_tmp @ R @ u_tmp.T)))
     if ep == N_ep-1:
         break
 
-    # Update the ensemble of Bs with inverse Kalman filter:
+    # Update the ensemble of Bs with inverse Kalman filter of state space model:
     x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
                                                                                np.array(u_ep), np.array(t_ep))
     inverse_kalman_filter.fit(x_flat, xdot_flat, u_flat) 
     B_ep.append(inverse_kalman_filter.B_ensemble)
 
+    # Update the ensemble of Bs with inverse Kalman filter of lifted model:
+    # TODO: arrayify data
+    keedmd_model = Keedmd(eigenfunction_basis, Ns, l1_pos=l1_pos_keedmd, l1_ratio_pos=l1_pos_ratio_keedmd,
+                          l1_vel=l1_vel_keedmd, l1_ratio_vel=l1_vel_ratio_keedmd, l1_eig=l1_eig_keedmd,
+                          l1_ratio_eig=l1_eig_ratio_keedmd, K_p=K_p, K_d=K_d, add_states=True)
+    X, X_d, Z, Z_dot, U, U_nom, t = keedmd_model.process(xs, np.zeros_like(xs), us, us_nom, ts)
+    keedmd_model.fit(X, X_d, Z, Z_dot, U, U_nom)
+    inverse_kalman_filter_keedmd.A = keedmd_model.A
+    # TODO: Learn B with inverse Kalman learner
+    # TODO: Design lifted robust controller
+    # TODO: Simulate system with updated controller
+    # TODO: Save data
+
 x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.array(u_ep), np.array(traj_ep), \
                                          np.array(B_ep), np.array(t_ep)
+# TODO: Transform lifted state dynamics data to arrays
+# TODO: Plot summary_EnMPC (For now, discuss what's the best way to show data later)
 
 #%%
 #! ===============================================   PLOT RESULTS    =================================================
