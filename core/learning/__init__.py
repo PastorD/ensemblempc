@@ -3,6 +3,7 @@ from .koopman_eigenfunctions import KoopmanEigenfunctions
 from .edmd import Edmd
 from .keedmd import Keedmd
 from .rbf_basis_functions import RBF
+from .monomial_basis_functions import Monomials
 from .identity_basis_functions import IdentityBF
 from .learner import Learner
 from .inverse_kalman_filter import InverseKalmanFilter

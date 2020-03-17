@@ -133,3 +133,49 @@ def rbf(X, C, type='gauss', eps=1.):
         Y[ii,:] = y
 
     return Y
+
+def calc_koopman_modes(A, output, x_0, t_eval):
+    d_w, w = np.linalg.eig(A.T)
+    d, v = np.linalg.eig(A)
+
+    sort_ind_w = np.argsort(np.abs(d_w))
+    w = w[:, sort_ind_w]
+    d_w = d_w[sort_ind_w]
+
+    sort_ind_v = np.argsort(np.abs(d))
+    v = v[:, sort_ind_v]
+    d = d[sort_ind_v]
+
+    non_zero_cols = np.where(np.diag(np.dot(w.T,v)) > 0)
+    w = w[:,non_zero_cols].squeeze()
+    v = v[:,non_zero_cols].squeeze()
+    d = d[non_zero_cols].squeeze()
+
+    eigfuncs = lambda x, t: np.divide(np.dot(w.T, output(x, t)), np.diag(np.dot(w.T, v)))
+    eigvals = np.exp(d)
+
+    koop_mode = lambda t: [eigvals[ii] ** t * eigfuncs(x_0, t)[ii] * v[:, ii] for ii in range(d.size)]
+    xs_koop = array([koop_mode(t) for t in t_eval])  # Evolution of each mode [n_time, n_modes, n_outputs]
+
+    return xs_koop, v, w, d
+
+def calc_reduced_mdl(model):
+    A = model.A
+    C = model.C
+    useful_rows = np.argwhere(np.abs(C) > 0)
+    useful_rows = np.unique(useful_rows[:,1])
+    useful_inds = np.argwhere(np.abs(A[useful_rows,:]) > 0)
+    useful_cols = np.unique(useful_inds[:,1])
+    useful_coords = np.unique(np.concatenate((useful_rows, useful_cols)))
+
+
+    A_red = model.A[useful_coords, :]
+    A_red = A_red[:, useful_coords]
+    if model.B is not None:
+        B_red = model.B[useful_coords,:]
+    else:
+        B_red = None
+    C_red = C[:,useful_coords]
+
+    return A_red, B_red, C_red, useful_coords
+
