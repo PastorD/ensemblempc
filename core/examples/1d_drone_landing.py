@@ -35,7 +35,7 @@ z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
 t_max = 2.5                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 6                                                   # Number of episodes
+N_ep = 2                                                   # Number of episodes
 
 # Model predictive controller parameters:
 Q = np.array([[1e4, 0.], [0., 1.]])
@@ -50,7 +50,6 @@ xmax=np.array([10., 5.])
 ref = np.array([[ground_altitude+0.1 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
 
-
 #! Filter Parameters:
 eta = 0.6**2 # measurement covariance
 Nb = 3 # number of ensemble
@@ -62,11 +61,11 @@ nk = 5 # number of steps for multi-step prediction
 E = np.array([0,-gravity*mass])
 B_ensemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
 
-
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
 true_sys = LinearSystemDynamics(A, B_mean)
 
-#! == Run limited MPC Controller ============
+
+#! ================================================ Run limited MPC Controller ===========================================
 
 lin_dyn_mean = LinearSystemDynamics(A, B_mean)
 ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ensemble, D=Dmatrix)
@@ -110,7 +109,7 @@ plt.grid()
 
 #%%
 #! ===============================================   RUN EXPERIMENT    ================================================
-inverse_kalman_filter = InverseKalmanFilter(A,B_mean, E, eta, B_ensemble, dt, nk )
+inverse_kalman_filter = InverseKalmanFilter(A, B_mean, E, eta, B_ensemble, dt, nk)
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
 x_th, u_th  = [], []
@@ -276,7 +275,7 @@ def plot_interactive_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep):
     f2 = plt.figure(figsize=(12,9))
     gs2 = gridspec.GridSpec(2,1, figure=f2)
 
-    ii = 1
+    ii = 0
     
     
     b1 = f2.add_subplot(gs2[0, ii])
