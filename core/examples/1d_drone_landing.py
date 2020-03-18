@@ -5,6 +5,7 @@ from ..learning import InverseKalmanFilter
 
 from matplotlib.ticker import MaxNLocator
 from matplotlib import gridspec
+import matplotlib.pylab as pl
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
@@ -114,49 +115,80 @@ if test_MPC:
 test_ensemble = True
 if test_ensemble:
     print(f"Run Testing Ensemble Experiment")
-    N_sampling = 5
-    x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
+    N_sampling = 20
+    x_raw, x_ensemble = [], []
     x_th, u_th  = [], []
     B_hist = []
     sigmaB = sigmaB = np.diag([0,0.2])
     for j in range(N_sampling):
-        print(f"Episode {j}")
 
         # Design robust MPC with current ensemble of Bs and execute experiment:
         B_sample = B_mean + sigmaB @ np.random.randn(Ns,Nu)
         B_hist.append(B_sample[1,0])
+        print(f"Test {j}: B:{B_sample[1,0]}")
         lin_dyn = LinearSystemDynamics(A, B_sample)
-        controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)  
-        x_tmp, u_tmp = system.simulate(z_0, controller, t_eval) 
-        x_th_tmp, u_th_tmp = controller.get_thoughts_traj()
-        x_th.append(x_th_tmp) # x_th[Nep][Nt][Ne] [Ns,Np]_NumpyArray
-        u_th.append(u_th_tmp)  # u_th [Nep][Nt] [Nu,Np]_NumpyAr
-        x_ep.append(x_tmp) # x_ep [Nep][Nt+1] [Ns,]_NumpyArray
-        xd_ep.append(np.transpose(ref).tolist())
-        u_ep.append(u_tmp) # u_ep [Nep][Nt] [Nu,]_NumpyArray
-        t_ep.append(t_eval.tolist()) # t_ep [Nep][Nt+1,]_NumpyArray
+        
+        controller_ensemble = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)          
+        x_tmp, u_tmp = system.simulate(z_0, controller_ensemble, t_eval) 
+        x_ensemble.append(x_tmp) # x_raw [N_sampling][Nt][Ns,]_NumpyArray
+        
+        controller_raw = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=None, D=Dmatrix)          
+        x_tmp, u_tmp = system.simulate(z_0, controller_raw, t_eval) 
+        x_raw.append(x_tmp) # x_ensemble [N_sampling][Nt][Ns,]_NumpyArray
+
         
     #! Plot results
     f21 = plt.figure(figsize=(18,9))
-    gs2 = gridspec.GridSpec(3,1, figure=f21)
+    gs2 = gridspec.GridSpec(3,2, figure=f21)
     plt.subplot(3,1,1)
     plt.hist(B_hist)
     plt.xlabel("B(2,1)")
     plt.grid()
-    import matplotlib.pylab as pl
-
     colors = pl.cm.cool((B_hist-min(B_hist))/(max(B_hist) - min(B_hist)))
-    plt.subplot(3,1,2)
-    [plt.plot(t,x[:,0],color=colorB) for t,x,colorB in zip(t_ep,x_ep,colors)]
+    
+    plt.subplot(3,2,3)
+    [plt.plot(t_eval,x[:,0],color=colorB) for x,colorB in zip(x_raw,colors)]
     plt.plot( [1,t_max], [xmin[0],xmin[0]], '--r', lw=2, label='Ground')
-    plt.plot( [1,t_max], [ref[1,0],ref[1,0]], '--r', lw=1, label='Reference')
-    plt.xlabel("Time(x)")
+    plt.plot( [1,t_max], [ref[0,0],ref[0,0]], '--r', lw=1, label='Reference')
+    plt.xlabel("Time(s)")
+    plt.ylabel("Position(m)")
     plt.ylim(ground_altitude-0.1,ground_altitude+ 0.2)
     plt.xlim(1,t_max)
-    plt.grid()  
-    plt.colorbar()
+    plt.legend()
+    plt.grid()
+    
+    plt.subplot(3,2,5)
+    [plt.plot(t_eval,x[:,1],color=colorB) for x,colorB in zip(x_raw,colors)]
+    plt.plot( [1,t_max], [0,0], '--r', lw=2, label='Zero Speed')
+    plt.xlabel("Time(s)")
+    plt.ylabel("Velocity(m/s)")
+    plt.ylim(-3.,2.)
+    plt.xlim(1,t_max)
+    plt.grid()
+    
+    
+    plt.subplot(3,2,4)
+    [plt.plot(t_eval,x[:,0],color=colorB) for x,colorB in zip(x_ensemble,colors)]
+    plt.plot( [1,t_max], [xmin[0],xmin[0]], '--r', lw=2, label='Ground')
+    plt.plot( [1,t_max], [ref[0,0],ref[0,0]], '--r', lw=1, label='Reference')
+    plt.xlabel("Time(s)")
+    plt.ylabel("Position(m)")
+    plt.ylim(ground_altitude-0.1,ground_altitude+ 0.2)
+    plt.xlim(1,t_max)
+    plt.legend()
+    plt.grid()
+    
+    plt.subplot(3,2,6)
+    [plt.plot(t_eval,x[:,1],color=colorB) for x,colorB in zip(x_ensemble,colors)]
+    plt.plot( [1,t_max], [0,0], '--r', lw=2, label='Zero Speed')
+    plt.xlabel("Time(s)")
+    plt.ylabel("Velocity(m/s)")
+    plt.ylim(-3.,2.)
+    plt.xlim(1,t_max)
+    plt.grid()
+    
 
-    f21.savefig('core/examples/results/test_B.pdf', format='pdf', dpi=2400)
+    f21.savefig('core/examples/results/test_B_both.pdf', format='pdf', dpi=2400)
     plt.show()
     
     
@@ -305,16 +337,16 @@ def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, 
     f2.savefig('core/examples/results/executed_traj.pdf', format='pdf', dpi=2400)
     plt.show()
 
-sp.io.savemat('./core/examples/1d_drone.mat', {'B_ep': B_ep, 
-                                                    'N_ep':N_ep, 
-                                                    'mpc_cost_ep':mpc_cost_ep,
-                                                    't_eval':t_eval, 
-                                                    'x_ep':x_ep,
-                                                    'u_ep':u_ep,
-                                                    'x_th':x_th,
-                                                    'u_th':u_th,
-                                                    'ground_altitude':ground_altitude,
-                                                    'T_hover':T_hover})
+    sp.io.savemat('./core/examples/1d_drone.mat', {'B_ep': B_ep, 
+                                                        'N_ep':N_ep, 
+                                                        'mpc_cost_ep':mpc_cost_ep,
+                                                        't_eval':t_eval, 
+                                                        'x_ep':x_ep,
+                                                        'u_ep':u_ep,
+                                                        'x_th':x_th,
+                                                        'u_th':u_th,
+                                                        'ground_altitude':ground_altitude,
+                                                        'T_hover':T_hover})
 
 if test_learning_B:
     plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, ground_altitude,T_hover)

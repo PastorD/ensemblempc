@@ -33,7 +33,7 @@ class RobustMpcDense(Controller):
                 name="noname", 
                 D=None,
                 ensemble=None,
-                gather_thoughts=True):
+                gather_thoughts=False):
         """__init__ [summary]
         
         osqp state: 
