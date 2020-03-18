@@ -12,10 +12,7 @@ from torch import nn, cuda, optim, from_numpy, manual_seed, no_grad, save, load,
 from torch.utils.data.dataset import Dataset, TensorDataset
 from torch.utils.data.dataset import random_split
 from torch.utils.data.dataloader import DataLoader
-<<<<<<< HEAD
-=======
 from torch.autograd.gradcheck import zero_gradients
->>>>>>> upstream/master
 
 class KoopmanEigenfunctions(BasisFunctions):
     """
