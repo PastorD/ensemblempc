@@ -131,6 +131,8 @@ if test_ensemble:
         controller_ensemble = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)          
         x_tmp, u_tmp = system.simulate(z_0, controller_ensemble, t_eval) 
         x_ensemble.append(x_tmp) # x_raw [N_sampling][Nt][Ns,]_NumpyArray
+        #for x in x_tmp:
+        #    if ( abs(x[])
         
         controller_raw = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=None, D=Dmatrix)          
         x_tmp, u_tmp = system.simulate(z_0, controller_raw, t_eval) 
@@ -152,6 +154,7 @@ if test_ensemble:
     plt.plot( [1,t_max], [ref[0,0],ref[0,0]], '--r', lw=1, label='Reference')
     plt.xlabel("Time(s)")
     plt.ylabel("Position(m)")
+    plt.title("Only considering the mean B")
     plt.ylim(ground_altitude-0.1,ground_altitude+ 0.2)
     plt.xlim(1,t_max)
     plt.legend()
@@ -173,6 +176,7 @@ if test_ensemble:
     plt.plot( [1,t_max], [ref[0,0],ref[0,0]], '--r', lw=1, label='Reference')
     plt.xlabel("Time(s)")
     plt.ylabel("Position(m)")
+    plt.title("Imposing constraints for all dynamics in the B ensemble")
     plt.ylim(ground_altitude-0.1,ground_altitude+ 0.2)
     plt.xlim(1,t_max)
     plt.legend()
