@@ -115,7 +115,7 @@ if test_MPC:
 test_ensemble = True
 if test_ensemble:
     print(f"Run Testing Ensemble Experiment")
-    N_sampling = 20
+    N_sampling = 200
     x_raw, x_ensemble = [], []
     x_th, u_th  = [], []
     B_hist = []
@@ -194,6 +194,14 @@ if test_ensemble:
 
     f21.savefig('core/examples/results/test_B_both.pdf', format='pdf', dpi=2400)
     plt.show()
+    
+    sp.io.savemat('./core/examples/1d_drone_Btesting.mat', {'x_ensemble': x_ensemble, 
+                                                        'xmin':xmin, 
+                                                        'x_raw':x_raw,
+                                                        't_eval':t_eval, 
+                                                        'B_hist':B_hist,
+                                                        't_max':t_max,
+                                                        'ref':ref})
     
     
     
