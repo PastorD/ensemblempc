@@ -33,23 +33,22 @@ Nu = B_mean.shape[1]
 # Define simulation parameters:
 z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
-t_max = 2.5                                                  # End time (sec)
+t_max = 2.5                                                 # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 6                                                   # Number of episodes
+N_ep = 6                                                    # Number of episodes
 
 # Model predictive controller parameters:
-Q = np.array([[1e4, 0.], [0., 1.]])
+Q = np.array([[1e3, 0.], [0., 1.]])
 QN = Q
-R = np.array([[1.]])
-Dmatrix = sp.sparse.diags([50000,30000])
+R = np.array([[1e1]])
+Dmatrix = sp.sparse.diags([5000,3000])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
 xmin=np.array([ground_altitude, -5.])
 xmax=np.array([10., 5.])
-ref = np.array([[ground_altitude+0.1 for _ in range(N_steps+1)],
+ref = np.array([[ground_altitude+0.025 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
-
 
 #! Filter Parameters:
 eta = 0.6**2 # measurement covariance
@@ -117,6 +116,7 @@ x_th, u_th  = [], []
 # B_ensemble [Ns,Nu,Ne] numpy array
 B_ep.append(B_ensemble) # B_ep[N_ep] of numpy array [Ns,Nu,Ne]
 
+
 for ep in range(N_ep):
     print(f"Episode {ep}")
     # Calculate predicted trajectories for each B in the ensemble:
@@ -130,7 +130,7 @@ for ep in range(N_ep):
 
     # Design robust MPC with current ensemble of Bs and execute experiment:
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
-    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)  
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ep[-1], D=Dmatrix)
     x_tmp, u_tmp = system.simulate(z_0, controller, t_eval) 
     x_th_tmp, u_th_tmp = controller.get_thoughts_traj()
     x_th.append(x_th_tmp) # x_th[Nep][Nt][Ne] [Ns,Np]_NumpyArray
@@ -142,6 +142,8 @@ for ep in range(N_ep):
     mpc_cost_ep.append(np.sum(np.diag((x_tmp[:-1,:].T-ref[:,:-1]).T@Q@(x_tmp[:-1,:].T-ref[:,:-1]) + u_tmp@R@u_tmp.T)))
     if ep == N_ep-1:
         break
+
+    print('MPC Cost: ', mpc_cost_ep[-1])
 
     # Update the ensemble of Bs with inverse Kalman filter:
     x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
