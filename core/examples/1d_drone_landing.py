@@ -244,6 +244,7 @@ for ep in range(N_ep):
                           l1_ratio_eig=l1_eig_ratio_keedmd, K_p=K_p, K_d=K_d, add_state=True)
     X, X_d, Z, Z_dot, U, U_nom, t = keedmd_model.process(x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, u_arr_keedmd, t_arr_keedmd)
     keedmd_model.fit(X, X_d, Z, Z_dot, U, U_nom)
+    # TODO: Add exploration noise and train KEEDMD based on that noise (now the control effect on the eigenfuncs are trained based on zero control input)
 
     print('- Updating ensemble, lifted model')
     A_keedmd = keedmd_model.A
