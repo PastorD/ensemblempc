@@ -68,181 +68,45 @@ B_ensemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[
 true_sys = LinearSystemDynamics(A, B_mean)
 print(f"Main parameters: Nb:{Nb}, N_ep:{N_ep}, N_t:{N_steps}")
 
-#! == Run limited MPC Controller ============
-test_MPC = False
-if test_MPC:
-    print(f"Run test Hard EnMPC")
-    lin_dyn_mean = LinearSystemDynamics(A, B_mean)
-    ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ensemble)
 
-    ctrl_tmp_mean.eval(z_0, 0)
-    u_mean = ctrl_tmp_mean.get_control_prediction()
-    z_mean = ctrl_tmp_mean.get_state_prediction()
-    z_b = ctrl_tmp_mean.get_ensemble_state_prediction()
-
-    t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
-    f,axarr=plt.subplots(3, sharex=True)
-    f.subplots_adjust(hspace=.1)
-    
-    plt.subplot(3,1,1,ylabel='Position')
-    plt.plot(t_z, z_mean[0,:], linewidth=3, label=f'B Mean {B_mean}')
-    for i in range(Nb):
-        plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
-    plt.plot(t_z, ground_altitude*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z', color='gray')
-    plt.legend(loc='upper right')
-    plt.grid()
-
-    plt.subplot(3,1,2, ylabel='Velocity')
-    plt.plot(t_z, z_mean[1,:], linewidth=3, label=f'B Mean {B_mean}')
-    for i in range(Nb):
-        plt.plot(t_z, z_b[i][1,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
-    plt.plot(t_z, xmin[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-    plt.plot(t_z, xmax[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-    plt.legend(loc='upper right')
-    plt.grid()
-
-    plt.subplot(3,1,3, xlabel="Time(s)",ylabel='Control Input')
-    plt.plot(t_z,u_mean.T,label=f'U Optimizing Mean Dynamics')
-    plt.plot(t_z, umin*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-    plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-    plt.legend(loc='upper right')
-    plt.grid()
-    plt.show()
-    f.savefig('core/examples/results/hard_mpc.pdf', format='pdf', dpi=2400)
-
-
-#! ===============================================   RUN TESTING ENSEMBLE EXPERIMENT =============================================
-test_ensemble = True
-if test_ensemble:
-    print(f"Run Testing Ensemble Experiment")
-    N_sampling = 200
-    x_raw, x_ensemble = [], []
-    x_th, u_th  = [], []
-    B_hist = []
-    sigmaB = sigmaB = np.diag([0,0.2])
-    for j in range(N_sampling):
-
-        # Design robust MPC with current ensemble of Bs and execute experiment:
-        B_sample = B_mean + sigmaB @ np.random.randn(Ns,Nu)
-        B_hist.append(B_sample[1,0])
-        print(f"Test {j}: B:{B_sample[1,0]}")
-        lin_dyn = LinearSystemDynamics(A, B_sample)
-        
-        controller_ensemble = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)          
-        x_tmp, u_tmp = system.simulate(z_0, controller_ensemble, t_eval) 
-        x_ensemble.append(x_tmp) # x_raw [N_sampling][Nt][Ns,]_NumpyArray
-        #for x in x_tmp:
-        #    if ( abs(x[])
-        
-        controller_raw = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=None, D=Dmatrix)          
-        x_tmp, u_tmp = system.simulate(z_0, controller_raw, t_eval) 
-        x_raw.append(x_tmp) # x_ensemble [N_sampling][Nt][Ns,]_NumpyArray
-
-        
-    #! Plot results
-    f21 = plt.figure(figsize=(18,9))
-    gs2 = gridspec.GridSpec(3,2, figure=f21)
-    plt.subplot(3,1,1)
-    plt.hist(B_hist)
-    plt.xlabel("B(2,1)")
-    plt.grid()
-    colors = pl.cm.cool((B_hist-min(B_hist))/(max(B_hist) - min(B_hist)))
-    
-    plt.subplot(3,2,3)
-    [plt.plot(t_eval,x[:,0],color=colorB) for x,colorB in zip(x_raw,colors)]
-    plt.plot( [1,t_max], [xmin[0],xmin[0]], '--r', lw=2, label='Ground')
-    plt.plot( [1,t_max], [ref[0,0],ref[0,0]], '--r', lw=1, label='Reference')
-    plt.xlabel("Time(s)")
-    plt.ylabel("Position(m)")
-    plt.title("Only considering the mean B")
-    plt.ylim(ground_altitude-0.1,ground_altitude+ 0.2)
-    plt.xlim(1,t_max)
-    plt.legend()
-    plt.grid()
-    
-    plt.subplot(3,2,5)
-    [plt.plot(t_eval,x[:,1],color=colorB) for x,colorB in zip(x_raw,colors)]
-    plt.plot( [1,t_max], [0,0], '--r', lw=2, label='Zero Speed')
-    plt.xlabel("Time(s)")
-    plt.ylabel("Velocity(m/s)")
-    plt.ylim(-3.,2.)
-    plt.xlim(1,t_max)
-    plt.grid()
-    
-    
-    plt.subplot(3,2,4)
-    [plt.plot(t_eval,x[:,0],color=colorB) for x,colorB in zip(x_ensemble,colors)]
-    plt.plot( [1,t_max], [xmin[0],xmin[0]], '--r', lw=2, label='Ground')
-    plt.plot( [1,t_max], [ref[0,0],ref[0,0]], '--r', lw=1, label='Reference')
-    plt.xlabel("Time(s)")
-    plt.ylabel("Position(m)")
-    plt.title("Imposing constraints for all dynamics in the B ensemble")
-    plt.ylim(ground_altitude-0.1,ground_altitude+ 0.2)
-    plt.xlim(1,t_max)
-    plt.legend()
-    plt.grid()
-    
-    plt.subplot(3,2,6)
-    [plt.plot(t_eval,x[:,1],color=colorB) for x,colorB in zip(x_ensemble,colors)]
-    plt.plot( [1,t_max], [0,0], '--r', lw=2, label='Zero Speed')
-    plt.xlabel("Time(s)")
-    plt.ylabel("Velocity(m/s)")
-    plt.ylim(-3.,2.)
-    plt.xlim(1,t_max)
-    plt.grid()
-    
-
-    f21.savefig('core/examples/results/test_B_both.pdf', format='pdf', dpi=2400)
-    plt.show()
-    
-    sp.io.savemat('./core/examples/1d_drone_Btesting.mat', {'x_ensemble': x_ensemble, 
-                                                        'xmin':xmin, 
-                                                        'x_raw':x_raw,
-                                                        't_eval':t_eval, 
-                                                        'B_hist':B_hist,
-                                                        't_max':t_max,
-                                                        'ref':ref})
-    
-    
     
 #%%
 #! ===============================================   RUN LEARNING B EXPERIMENT    ================================================
-test_learning_B = False
-if test_learning_B:
-    print(f"Run RUN LEARNING B EXPERIMENT")
-    inverse_kalman_filter = InverseKalmanFilter(A,B_mean, E, eta, B_ensemble, dt, nk )
 
-    x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
-    x_th, u_th  = [], []
-    # B_ensemble [Ns,Nu,Ne] numpy array
-    B_ep.append(B_ensemble) # B_ep[N_ep] of numpy array [Ns,Nu,Ne]
+print(f"Run RUN LEARNING B EXPERIMENT")
+inverse_kalman_filter = InverseKalmanFilter(A,B_mean, E, eta, B_ensemble, dt, nk )
 
-    for ep in range(N_ep):
-        print(f"Episode {ep}")
+x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
+x_th, u_th  = [], []
+# B_ensemble [Ns,Nu,Ne] numpy array
+B_ep.append(B_ensemble) # B_ep[N_ep] of numpy array [Ns,Nu,Ne]
 
-        # Design robust MPC with current ensemble of Bs and execute experiment:
-        lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
-        controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)  
-        x_tmp, u_tmp = system.simulate(z_0, controller, t_eval) 
-        x_th_tmp, u_th_tmp = controller.get_thoughts_traj()
-        x_th.append(x_th_tmp) # x_th[Nep][Nt][Ne] [Ns,Np]_NumpyArray
-        u_th.append(u_th_tmp)  # u_th [Nep][Nt] [Nu,Np]_NumpyArray
-        x_ep.append(x_tmp) # x_ep [Nep][Nt+1] [Ns,]_NumpyArray
-        xd_ep.append(np.transpose(ref).tolist())
-        u_ep.append(u_tmp) # u_ep [Nep][Nt] [Nu,]_NumpyArray
-        t_ep.append(t_eval.tolist()) # t_ep [Nep][Nt+1,]_NumpyArray
-        mpc_cost_ep.append(np.sum(np.diag((x_tmp[:-1,:].T-ref[:,:-1]).T@Q@(x_tmp[:-1,:].T-ref[:,:-1]) + u_tmp@R@u_tmp.T)))
-        if ep == N_ep-1:
-            break
+for ep in range(N_ep):
+    print(f"Episode {ep}")
 
-        # Update the ensemble of Bs with inverse Kalman filter:
-        x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
-                                                                                np.array(u_ep), np.array(t_ep))
-        inverse_kalman_filter.fit(x_flat, xdot_flat, u_flat) 
-        B_ep.append(inverse_kalman_filter.B_ensemble)
+    # Design robust MPC with current ensemble of Bs and execute experiment:
+    lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)  
+    x_tmp, u_tmp = system.simulate(z_0, controller, t_eval) 
+    x_th_tmp, u_th_tmp = controller.get_thoughts_traj()
+    x_th.append(x_th_tmp) # x_th[Nep][Nt][Ne] [Ns,Np]_NumpyArray
+    u_th.append(u_th_tmp)  # u_th [Nep][Nt] [Nu,Np]_NumpyArray
+    x_ep.append(x_tmp) # x_ep [Nep][Nt+1] [Ns,]_NumpyArray
+    xd_ep.append(np.transpose(ref).tolist())
+    u_ep.append(u_tmp) # u_ep [Nep][Nt] [Nu,]_NumpyArray
+    t_ep.append(t_eval.tolist()) # t_ep [Nep][Nt+1,]_NumpyArray
+    mpc_cost_ep.append(np.sum(np.diag((x_tmp[:-1,:].T-ref[:,:-1]).T@Q@(x_tmp[:-1,:].T-ref[:,:-1]) + u_tmp@R@u_tmp.T)))
+    if ep == N_ep-1:
+        break
 
-    x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.array(u_ep), np.array(traj_ep), \
-                                            np.array(B_ep), np.array(t_ep)
+    # Update the ensemble of Bs with inverse Kalman filter:
+    x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
+                                                                            np.array(u_ep), np.array(t_ep))
+    inverse_kalman_filter.fit(x_flat, xdot_flat, u_flat) 
+    B_ep.append(inverse_kalman_filter.B_ensemble)
+
+x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.array(u_ep), np.array(traj_ep), \
+                                        np.array(B_ep), np.array(t_ep)
 
 #%%
 #! ===============================================   PLOT RESULTS    =================================================
@@ -360,5 +224,4 @@ def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, 
                                                         'ground_altitude':ground_altitude,
                                                         'T_hover':T_hover})
 
-if test_learning_B:
-    plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, ground_altitude,T_hover)
+plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, ground_altitude,T_hover)
