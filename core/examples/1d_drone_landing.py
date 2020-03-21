@@ -5,6 +5,7 @@ from ..learning import InverseKalmanFilter
 
 from matplotlib.ticker import MaxNLocator
 from matplotlib import gridspec
+import matplotlib.pylab as pl
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy as sp
@@ -64,51 +65,14 @@ B_ensemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[
 
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
 true_sys = LinearSystemDynamics(A, B_mean)
-
-#! == Run limited MPC Controller ============
-
-lin_dyn_mean = LinearSystemDynamics(A, B_mean)
-ctrl_tmp_mean = RobustMpcDense(lin_dyn_mean, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ensemble, D=Dmatrix)
-#lin_dyn_b = [ LinearSystemDynamics(A, B_ensemble[:,:,i]) for i in range(Nb)]
-#ctrl_tmp_b = [ RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref) for lin_dyn in lin_dyn_b]
-
-ctrl_tmp_mean.eval(z_0, 0)
-u_mean = ctrl_tmp_mean.get_control_prediction()
-z_mean = ctrl_tmp_mean.get_state_prediction()
-z_b = ctrl_tmp_mean.get_ensemble_state_prediction()
-
-t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
-f,axarr=plt.subplots(3, sharex=True)
-f.subplots_adjust(hspace=.1)
-#plt.figure(figsize=(12,6))
-plt.subplot(3,1,1,ylabel='Position')
-plt.plot(t_z, z_mean[0,:], linewidth=3, label=f'B Mean {B_mean}')
-for i in range(Nb):
-    plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
-plt.plot(t_z, ground_altitude*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z', color='gray')
-plt.legend(loc='upper right')
-plt.grid()
-
-plt.subplot(3,1,2, ylabel='Velocity')
-plt.plot(t_z, z_mean[1,:], linewidth=3, label=f'B Mean {B_mean}')
-for i in range(Nb):
-    plt.plot(t_z, z_b[i][1,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
-plt.plot(t_z, xmin[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-plt.plot(t_z, xmax[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-plt.legend(loc='upper right')
-plt.grid()
-
-plt.subplot(3,1,3, xlabel="Time(s)",ylabel='Control Input')
-plt.plot(t_z,u_mean.T,label=f'U Optimizing Mean Dynamics')
-plt.plot(t_z, umin*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
-plt.legend(loc='upper right')
-plt.grid()
-#plt.show()
+print(f"Main parameters: Nb:{Nb}, N_ep:{N_ep}, N_t:{N_steps}")
 
 
+    
 #%%
-#! ===============================================   RUN EXPERIMENT    ================================================
+#! ===============================================   RUN LEARNING B EXPERIMENT    ================================================
+
+print(f"Run RUN LEARNING B EXPERIMENT")
 inverse_kalman_filter = InverseKalmanFilter(A,B_mean, E, eta, B_ensemble, dt, nk )
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
@@ -119,14 +83,6 @@ B_ep.append(B_ensemble) # B_ep[N_ep] of numpy array [Ns,Nu,Ne]
 
 for ep in range(N_ep):
     print(f"Episode {ep}")
-    # Calculate predicted trajectories for each B in the ensemble:
-    # traj_ep_tmp = []
-    # for i in range(Nb):
-    #     lin_dyn = LinearSystemDynamics(A, B_ensemble[:,:,i])
-    #     ctrl_tmp = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)
-    #     ctrl_tmp.eval(z_0, 0)
-    #     traj_ep_tmp.append(ctrl_tmp.get_state_prediction())
-    # traj_ep.append(traj_ep_tmp)
 
     # Design robust MPC with current ensemble of Bs and execute experiment:
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
@@ -147,12 +103,12 @@ for ep in range(N_ep):
 
     # Update the ensemble of Bs with inverse Kalman filter:
     x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
-                                                                               np.array(u_ep), np.array(t_ep))
+                                                                            np.array(u_ep), np.array(t_ep))
     inverse_kalman_filter.fit(x_flat, xdot_flat, u_flat) 
     B_ep.append(inverse_kalman_filter.B_ensemble)
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.array(u_ep), np.array(traj_ep), \
-                                         np.array(B_ep), np.array(t_ep)
+                                        np.array(B_ep), np.array(t_ep)
 
 #%%
 #! ===============================================   PLOT RESULTS    =================================================
@@ -259,51 +215,15 @@ def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, 
     f2.savefig('core/examples/results/executed_traj.pdf', format='pdf', dpi=2400)
     plt.show()
 
-sp.io.savemat('./core/examples/1d_drone.mat', {'B_ep': B_ep, 
-                                                    'N_ep':N_ep, 
-                                                    'mpc_cost_ep':mpc_cost_ep,
-                                                    't_eval':t_eval, 
-                                                    'x_ep':x_ep,
-                                                    'u_ep':u_ep,
-                                                    'x_th':x_th,
-                                                    'u_th':u_th,
-                                                    'ground_altitude':ground_altitude,
-                                                    'T_hover':T_hover})
-
+    sp.io.savemat('./core/examples/1d_drone.mat', {'B_ep': B_ep, 
+                                                        'N_ep':N_ep, 
+                                                        'mpc_cost_ep':mpc_cost_ep,
+                                                        't_eval':t_eval, 
+                                                        'x_ep':x_ep,
+                                                        'u_ep':u_ep,
+                                                        'x_th':x_th,
+                                                        'u_th':u_th,
+                                                        'ground_altitude':ground_altitude,
+                                                        'T_hover':T_hover})
 
 plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, ground_altitude,T_hover)
-
-
-def plot_interactive_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep):
-    f2 = plt.figure(figsize=(12,9))
-    gs2 = gridspec.GridSpec(2,1, figure=f2)
-
-    ii = 1
-    
-    
-    b1 = f2.add_subplot(gs2[0, ii])
-    b1.plot([t_eval[0], t_eval[-1]], [ground_altitude, ground_altitude], '--r', lw=2, label='Ground constraint')
-    b1.plot(t_eval, x_ep[ii, :, 0], label='z')
-    b1.fill_between(t_eval, ref[0,:], x_ep[ii, :, 0], alpha=0.2)
-    b1.plot(t_eval, x_ep[ii, :, 1], label='$\dot{z}$')
-    err_norm = (t_eval[-1]-t_eval[0])*np.sum(np.square(x_ep[ii, :, 0].T - ref[0,:]))/x_ep[ii, :, 0].shape[0]
-    b1.text(1.2, 0.5, "$\int (z-z_d)^2=${0:.2f}".format(err_norm))
-    b1.set_title('Executed trajectory, ep ' + str(ii))
-    b1.set_xlabel('Time (sec)')
-    b1.set_ylabel('z, $\dot{z}$ (m, m/s)')
-    b1.grid()
-
-    b2 = f2.add_subplot(gs2[1, ii])
-    b2.plot(t_eval[:-1], u_ep[ii, :, 0], label='T')
-    b2.plot([t_eval[0], t_eval[-2]], [umax+T_hover, umax+T_hover], '--r', lw=2, label='Max thrust')
-    b2.fill_between(t_eval[:-1], np.zeros_like(u_ep[ii, :, 0]), u_ep[ii, :, 0], alpha=0.2)
-    ctrl_norm = (t_eval[-2] - t_eval[0]) * np.sum((np.square(u_ep[ii, :, 0]))/u_ep[ii, :, 0].shape[0])
-    b2.text(1.2, 11, "$\int u_n^2=${0:.2f}".format(ctrl_norm))
-    b2.set_title('Executed control effort, ep ' + str(ii))
-    b2.set_xlabel('Time (sec)')
-    b2.set_ylabel('Thrust (N)')
-    b2.grid()
-    plt.show()
-
-
-plot_interactive_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep)
