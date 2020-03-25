@@ -3,7 +3,7 @@ from ..learning import InverseKalmanFilter
 
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import numpy as np
 import scipy as sp
 from scipy.integrate import solve_ivp
@@ -57,7 +57,7 @@ sigmaE_timestep = np.diag([0.0,0.0])
 
 
 dt = 0.01
-Ntraj = 20
+Ntraj = 2
 X, U, B = [],[], []
 for i in range(Ntraj):
     B_traj = B_mean + sigmaB_traj @ np.random.randn(Ns,Nu)

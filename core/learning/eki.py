@@ -185,7 +185,7 @@ class EKI():
                 plt.ylabel("measurement difference")
                 plt.grid()
                 plt.title("Measurement for different ensembles")
-                plt.legend()
+                #plt.legend()
                 plt.subplot(2,2,2,xlabel="U", ylabel=f"Cuu")
                 plt.imshow(Cuu,  interpolation='nearest', cmap=cm.Greys_r)
                 plt.subplot(2,2,3,xlabel="g", ylabel="Cgg")
@@ -193,6 +193,9 @@ class EKI():
                 plt.subplot(2,2,4,xlabel="time", ylabel="K")
                 plt.plot(K.T, linewidth=1,label=f'Measurement')  
                 plt.show()
+                plt.savefig(f"eki_debug_states.pdf", format='pdf', dpi=1200)
+                print("test pring")
+
 
             Yd = np.reshape(Y, (-1, 1)) + np.random.normal(size=(Y.size,self.Ne))*self.eta_0*0.
             xe = xe + K @ (Yd - Gxe)                                 

@@ -118,6 +118,8 @@ class InverseKalmanFilter(Learner):
             plt.title("Input")
             plt.legend()
             plt.show()
+            plt.savefig(f"fit_debug_states.pdf", format='pdf', dpi=1200,bbox_inches='tight')
+
 
 
 
