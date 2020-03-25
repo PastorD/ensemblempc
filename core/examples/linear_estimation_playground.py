@@ -1,6 +1,9 @@
+#%%
 from ..learning import InverseKalmanFilter
 
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 import numpy as np
 import scipy as sp
 from scipy.integrate import solve_ivp
@@ -47,19 +50,26 @@ B_mean = np.array([[0.],[1]])
 Ns = B_mean.shape[0]
 E_mean = np.random.normal(Ns)
 Nu = B_mean.shape[1]
-sigmaB = np.diag([0,0.2])
-sigmaE = np.diag([0.0,0.0])
+sigmaB_traj = np.diag([0,0.2])
+sigmaB_timestep = np.array([0.,0.])
+sigmaE_traj = np.diag([0.0,0.])
+sigmaE_timestep = np.diag([0.0,0.0])
 
 
 dt = 0.01
-Ntraj = 10 
+Ntraj = 20
 X, U, B = [],[], []
 for i in range(Ntraj):
-    X_temp, U_temp, t_temp, B_temp = simulate(A_mean,B_mean,E_mean,sigmaB,sigmaE,dt=dt)
+    B_traj = B_mean + sigmaB_traj @ np.random.randn(Ns,Nu)
+    E_traj = E_mean + sigmaE_traj @ np.random.randn(Ns)
+    print(f"Trajectory {i}, B[1]: {B_traj[1,0]}")
+    X_temp, U_temp, t_temp, B_temp = simulate(A_mean,B_traj,E_traj,sigmaB_timestep,sigmaE_timestep,dt=dt)
     X.append(X_temp)
     U.append(U_temp)
     B.append(B_temp)
-    
+
+#%%
+
 print(len(X))
 eta_0 = 0.1
 Nen = 5
@@ -76,16 +86,16 @@ eki.fit(X, X_dot=None,U=U)
 cov_B = eki.eki.cov_theta
 B_reco = np.mean(eki.B_ensemble_flat,axis=1)
 print(f"B:{B_mean[1]} vs recovered:{B_reco[1]}")
-print(f"sigma B:{sigmaB[1]} vs recovered:{cov_B[1,1]}")
+print(f"sigma B_time:{sigmaB_timestep[1]}, sigma B_traj:{sigmaB_traj[1]}  vs recovered:{cov_B}")
 
 
     
-
+#%%
 #! ============================== PLOT RAW  =================================
 case_name = "test"
 
-plt.figure
-[plt.plot(t_temp, x1, linewidth=1,label="pos") for x1 in X]
+plt.figure()
+[plt.plot(t_temp, x1[0,:], linewidth=1,label="pos") for x1 in X]
 plt.xlabel("Time (s)")
 plt.ylabel("X")
 plt.grid()
