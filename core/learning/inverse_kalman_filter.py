@@ -100,7 +100,7 @@ class InverseKalmanFilter(Learner):
         """
         Ntraj = len(X)
         
-        debug = False
+        debug = True
         if debug:
             plt.figure()
             plt.subplot(2,1,1,xlabel="time", ylabel="X")
@@ -124,7 +124,7 @@ class InverseKalmanFilter(Learner):
 
 
         
-        shrink_debug = True
+        shrink_debug = False
         if (shrink_debug):
             shrink_rate = 0.6
             B_mean = np.mean(self.B_ensemble,axis=2)
@@ -133,10 +133,15 @@ class InverseKalmanFilter(Learner):
                 self.new_ensamble[:,:,i] = B_mean + shrink_rate*(self.B_ensemble[:,:,i]-B_mean)
         else:
 
-            Ym_flat = np.empty((self.Ns,0))
-            for Xtraj in X:
-                Ym_flat = np.append( Ym_flat, (Xtraj[:,self.nk:] - Xtraj[:,:-self.nk]).flatten() )
-            #Ym_flat = Ym.flatten()
+            Nt = X[0].shape[1] # number of 
+            Ntk = Nt - self.nk # number of columns per trajectory 
+            Ng = Ntk*Ntraj # number of columns of G
+            Ngs = Ng*self.Ns # total size of G flatten
+            Ym = np.empty((Ntraj,self.Ns,Ntk))
+            for i_traj, Xtraj in enumerate(X):
+                Ydiff = Xtraj[:,self.nk:] - Xtraj[:,:-self.nk]
+                Ym[i_traj,:,:] = Ydiff
+            Ym_flat = Ym.flatten()
             self.eki.G = lambda Bflat: self.Gdynamics(Bflat,X,U)
             self.B_ensemble_flat =  self.B_ensemble.reshape(-1, self.B_ensemble.shape[-1]) # [NsNu,Ne]
             print(f"new {self.B_ensemble_flat}")
@@ -161,29 +166,30 @@ class InverseKalmanFilter(Learner):
             numpy array [Ng,] -- G(theta)
         """
         Ntraj = len(X)
-        Nt = X[0].shape[1]
-        Ntk = Nt - self.nk
-        Ng = Ntk*Ntraj
-        Ngs = Ng*self.Ns
-        G = np.empty((self.Ns,0))
+        Nt = X[0].shape[1] # number of 
+        Ntk = Nt - self.nk # number of columns per trajectory 
+        Ng = Ntk*Ntraj # number of columns of G
+        Ngs = Ng*self.Ns # total size of G flatten
+        G = np.empty((Ntraj,self.Ns,Ntk))
 
         B = Bflat.reshape(self.Bshape)
         #self.get_multistep_matrices(B)
         
-        for Xtraj, Utraj in zip(X,U):
+        for i_traj, (Xtraj, Utraj) in enumerate(zip(X,U)):
             for i in range(Ntk):
-                xc = Xtraj[:,i]
+                xc = Xtraj[:,i] # init of nk steps
                 for multistep_index in range(self.nk):
                     ctrl = Utraj[:,i+multistep_index]
                     xc = solve_ivp(lambda t,x: self.A @ x + B @ ctrl + self.E, [0, self.dt], xc, atol=1e-6, rtol=1e-6).y[:, -1] 
                 Gi = xc-Xtraj[:,i]
-                G = np.append( G, Gi )
+                G[i_traj,:,i] = Gi
+
                 #ctrl = U[:,i:i+self.nk]
                 #f_x_dot = lambda t,x: self.A @ x + B @ ctrl[int(t/dt)]
                 #Xplus = solve_ivp(f_x_dot, [0, dt*nk], X[:,j], atol=1e-6, rtol=1e-6).y[:, -1] 
                 #G[:,i] = xc-X[:,i]
                 #G[:,i] = self.An @ X[:,i] + self.ABM @ U[:,i:i+self.nk].flatten()#-X[:,i]
-        return G
+        return G.flatten()
         
 
     def predict(self,X, U):

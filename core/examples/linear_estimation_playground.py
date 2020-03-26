@@ -57,7 +57,7 @@ sigmaE_timestep = np.diag([0.0,0.0])
 
 
 dt = 0.01
-Ntraj = 2
+Ntraj = 30
 X, U, B = [],[], []
 for i in range(Ntraj):
     B_traj = B_mean + sigmaB_traj @ np.random.randn(Ns,Nu)
@@ -72,7 +72,7 @@ for i in range(Ntraj):
 
 print(len(X))
 eta_0 = 0.1
-Nen = 5
+Nen = 10
 bspread = 0.6
 B_0 = np.zeros((Ns,Nu,Nen))
 for i in range(Nen):
@@ -80,9 +80,9 @@ for i in range(Nen):
     #B_0 = [B_mean + np.random.randn(Ns,Nu)*bspread for i in range(Ne)]
     
 plt.hist([B[j][i][1,0] for i in range(99) for j in range(Ntraj)],bins=50)
-plt.show()
+#plt.show()
 eki = InverseKalmanFilter(A_mean,B_mean,E_mean,eta_0,B_0,dt=dt,nk=10)
-eki.fit(X, X_dot=None,U=U)
+eki.fit(X, U=U)
 cov_B = eki.eki.cov_theta
 B_reco = np.mean(eki.B_ensemble_flat,axis=1)
 print(f"B:{B_mean[1]} vs recovered:{B_reco[1]}")

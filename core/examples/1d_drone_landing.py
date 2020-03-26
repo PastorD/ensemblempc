@@ -45,7 +45,7 @@ umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
 xmin=np.array([-10, -10.])
 xmax=np.array([10., 10.])
-ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
+ref = np.array([[ground_altitude+0.2 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
 
 
@@ -58,7 +58,7 @@ for i in range(Nb):
     B_ensemble[:,:,i] = B_mean+np.array([[0.],[np.random.normal()*0.3]])
 
 E= np.array([0,-gravity*mass])
-#B_emsemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
+B_ensemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
 
 
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
@@ -98,7 +98,8 @@ for ep in range(N_ep):
     # Update the ensemble of Bs with inverse Kalman filter:
     #x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
     #                                                                           np.array(u_ep), np.array(t_ep))
-    inverse_kalman_filter.fit(x_ep, u_ep) 
+    if (ep > 2):
+        inverse_kalman_filter.fit(x_ep, u_ep) 
     B_ep.append(inverse_kalman_filter.B_ensemble)
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.array(u_ep), np.array(traj_ep), \
