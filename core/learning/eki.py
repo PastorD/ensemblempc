@@ -174,25 +174,30 @@ class EKI():
             Cgg =  Gxe_d @ Gxe_d.T
             K = Cug @ np.linalg.inv(Cgg + R) 
             
-            debug = True
+            debug = False
             if debug:
                 plt.figure()
-                plt.subplot(2,2,1,xlabel="Ns*(N+1)", ylabel="Ns*(N+1)")
+                plt.subplot(2,1,1,xlabel="Ns*(N+1)", ylabel="Ns*(N+1)")
                 for i in range(self.Ne):
                     plt.plot(Gxe[:,i], linewidth=1,label=f'\\theta {xe[:,i]}')
                 plt.plot(Y, linewidth=3,label=f'Measurement')                
                 plt.xlabel("Time, x, then v")
                 plt.ylabel("measurement difference")
                 plt.grid()
-                plt.title("Measurement for different ensembles")
                 plt.legend()
-                plt.subplot(2,2,2,xlabel="U", ylabel=f"Cuu")
-                plt.imshow(Cuu,  interpolation='nearest', cmap=cm.Greys_r)
-                plt.subplot(2,2,3,xlabel="g", ylabel="Cgg")
-                plt.imshow(Cgg,  interpolation='nearest', cmap=cm.Greys_r)
-                plt.subplot(2,2,4,xlabel="time", ylabel="K")
+                plt.title("Measurement for different ensembles")
+                plt.subplot(2,1,2,xlabel="time", ylabel="K")
                 plt.plot(K.T, linewidth=1,label=f'Measurement')  
+                plt.grid()
+                plt.legend()
+                # plt.subplot(2,2,2,xlabel="U", ylabel=f"Cuu")
+                # plt.imshow(Cuu,  interpolation='nearest', cmap=cm.Greys_r)
+                # plt.subplot(2,2,3,xlabel="g", ylabel="Cgg")
+                # plt.imshow(Cgg,  interpolation='nearest', cmap=cm.Greys_r)
                 plt.show()
+                plt.savefig(f"eki_debug_states.pdf", format='pdf', dpi=1200)
+                print("test pring")
+
 
             Yd = np.reshape(Y, (-1, 1)) + np.random.normal(size=(Y.size,self.Ne))*self.eta_0*0.
             xe = xe + K @ (Yd - Gxe)                                 
@@ -204,9 +209,16 @@ class EKI():
             error = np.sqrt(error_v.dot(error_v))
             print(f'Iteration EKI {j+1}/{self.maxiter}. Error {error:.2f}')
             print(f"xe {xe}")
+            print(f"ubar {ubar}")
 
 
 
             #if (abs(error) < self.max_error):
             #    break
+        self.ubar = ubar
+        self.cov_theta = Cuu
         return xe
+    def get_Cov_theta(self, xe):
+        ubar = np.mean(xe,axis=1,keepdims=True) # keepdims so it can be substracted to xe
+        u_d = xe - ubar
+        return u_d @ u_d.T 
