@@ -12,12 +12,13 @@ from torch import nn, cuda, optim, from_numpy, manual_seed, no_grad, save, load,
 from torch.utils.data.dataset import Dataset, TensorDataset
 from torch.utils.data.dataset import random_split
 from torch.utils.data.dataloader import DataLoader
+from torch.autograd.gradcheck import zero_gradients
 
 class KoopmanEigenfunctions(BasisFunctions):
     """
     Class for construction and lifting using Koopman eigenfunctions
     """
-    def __init__(self, n, max_power, A_cl, BK):
+    def __init__(self, n, max_power, A_cl, BK, traj_input=False):
         """KoopmanEigenfunctions 
         
         Arguments:
@@ -31,6 +32,7 @@ class KoopmanEigenfunctions(BasisFunctions):
         self.max_power = max_power
         self.A_cl = A_cl
         self.BK = BK
+        self.traj_input = traj_input
         self.Nlift = None
         self.Lambda = None
         self.basis = None
@@ -61,8 +63,8 @@ class KoopmanEigenfunctions(BasisFunctions):
             w = real(w)
 
         # Scale up w to get kronecker delta
-        #w_scaling = diag(dot(v.T, w))
-        #w = divide(w, w_scaling.reshape(1,w.shape[0]))
+        w_scaling = diag(dot(v.T, w))
+        w = divide(w, w_scaling.reshape(1,w.shape[0]))
 
         p = array([ii for ii in range(self.max_power+1)])
         combinations = array(list(combinations_with_replacement(p, self.n)))
@@ -86,12 +88,14 @@ class KoopmanEigenfunctions(BasisFunctions):
         q = q.transpose()
         q_d = q_d.transpose()
         self.diffeomorphism_model.eval()
-        input = npconcatenate((q, q_d),axis=1)
+        if self.traj_input:
+            input = npconcatenate((q, q_d),axis=1)
+        else:
+            input = q
         diff_pred = self.diffeomorphism_model.predict(from_numpy(input))
-        return (q + diff_pred).transpose() #TODO: Return to this to get diffeomorphism with learning
-        #return q.T
+        return (q + diff_pred).T
 
-    def build_diffeomorphism_model(self, jacobian_penalty=1., n_hidden_layers = 2, layer_width=50, batch_size = 64, dropout_prob=0.1):
+    def build_diffeomorphism_model(self, jacobian_penalty=1., n_hidden_layers=2, layer_width=50, batch_size=64, dropout_prob=0.1):
         """build_diffeomorphism_model 
         
         Keyword Arguments:
@@ -104,7 +108,7 @@ class KoopmanEigenfunctions(BasisFunctions):
         self.A_cl = from_numpy(self.A_cl)
         self.diffeomorphism_model = DiffeomorphismNet(self.n, self.A_cl, jacobian_penalty=jacobian_penalty,
                                                       n_hidden_layers=n_hidden_layers, layer_width=layer_width,
-                                                      batch_size=batch_size, dropout_prob=dropout_prob)
+                                                      batch_size=batch_size, dropout_prob=dropout_prob, traj_input=self.traj_input)
 
     def fit_diffeomorphism_model(self, X, t, X_d, learning_rate=1e-2, learning_decay=0.95, n_epochs=50, train_frac=0.8, l2=1e1, batch_size=64, initialize=True, verbose=True, X_val=None, t_val=None, Xd_val=None):
         """fit_diffeomorphism_model 
@@ -131,14 +135,16 @@ class KoopmanEigenfunctions(BasisFunctions):
         Returns:
             float -- val_losses[-1]
         """
-        X, X_dot, X_d, X_d_dot, t = self.process(X=X, t=t, X_d=X_d)
-        y_target = X_dot - dot(self.A_cl, X.transpose()).transpose()# - dot(self.BK, X_d.transpose()).transpose()  #TODO: Modify if necessary
-
         device = 'cuda' if cuda.is_available() else 'cpu'
+        X, X_dot, X_d, X_d_dot, t = self.process(X=X, t=t, X_d=X_d)
 
         # Prepare data for pytorch:
         manual_seed(42)  # Fix seed for reproducibility
-        X_tensor = from_numpy(npconcatenate((X, X_d, X_dot, X_d_dot, np.zeros_like(X)),axis=1)) #[x (1,n), x_d (1,n), x_dot (1,n), zeros (1,n)]
+        if self.traj_input:
+            X_tensor = from_numpy(npconcatenate((X, X_d, X_dot, X_d_dot, np.zeros_like(X)),axis=1)) #[x (1,n), x_d (1,n), x_dot (1,n), zeros (1,n)]
+        else:
+            X_tensor = from_numpy(npconcatenate((X, X_dot, np.zeros_like(X)), axis=1))  # [x (1,n), x_d (1,n), x_dot (1,n), zeros (1,n)]
+        y_target = X_dot - (dot(self.A_cl, X.T) + dot(self.BK, X_d.T)).T
         y_tensor = from_numpy(y_target)
         X_tensor.requires_grad_(True)
 
@@ -156,8 +162,11 @@ class KoopmanEigenfunctions(BasisFunctions):
         else:
             #Uses X,... as training data and X_val,... as validation data
             X_val, X_dot_val, Xd_val, Xd_dot_val, t_val = self.process(X=X_val, t=t_val, X_d=Xd_val)
-            y_target_val = X_dot_val - dot(self.A_cl, X_val.transpose()).transpose()# - dot(self.BK, X_d.transpose()).transpose()  #TODO: Modify if necessary
-            X_val_tensor = from_numpy(npconcatenate((X_val, Xd_val, X_dot_val, Xd_dot_val, np.zeros_like(X_val)),axis=1)) #[x (1,n), x_d (1,n), x_dot (1,n), zeros (1,n)]
+            if self.traj_input:
+                X_val_tensor = from_numpy(npconcatenate((X_val, Xd_val, X_dot_val, Xd_dot_val, np.zeros_like(X_val)),axis=1)) #[x (1,n), x_d (1,n), x_dot (1,n), zeros (1,n)]
+            else:
+                X_val_tensor = from_numpy(npconcatenate((X_val, X_dot_val, np.zeros_like(X_val)),axis=1))  # [x (1,n), x_dot (1,n), zeros (1,n)]
+            y_target_val = X_dot_val - dot(self.A_cl, X_val.T + dot(self.BK, Xd_val.T)).T
             y_val_tensor = from_numpy(y_target_val)
             X_val_tensor.requires_grad_(True)
             val_dataset = TensorDataset(X_val_tensor, y_val_tensor)
@@ -231,8 +240,8 @@ class KoopmanEigenfunctions(BasisFunctions):
             if verbose:
                 print(' - Epoch: ',i,' Training loss:', format(losses[-1], '08f'), ' Validation loss:', format(val_losses[-1], '08f'))
                 print('Improvement metric (for early stopping): ', sum(abs(array(val_losses[-min(3,len(val_losses)):])-val_losses[-1]))/(3*val_losses[-min(3,len(val_losses))]))
-            if i > n_epochs/4 and sum(abs(array(val_losses[-min(3,len(val_losses)):])-val_losses[-1]))/(3*val_losses[-min(3,len(val_losses))]) < 0.05:
-                print('Early stopping activated')
+            if i > n_epochs/4 and sum(abs(array(val_losses[-min(3,len(val_losses)):])-val_losses[-1]))/(3*val_losses[-min(3,len(val_losses))]) < 0.01:
+                #print('Early stopping activated')
                 break
 
         return val_losses[-1]

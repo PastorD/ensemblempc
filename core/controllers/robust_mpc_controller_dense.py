@@ -14,16 +14,7 @@ import matplotlib.cm as cm
 
 from .controller import Controller
 from ..learning.edmd import Edmd
-
-
-def block_diag(M,n):
-  """bd creates a sparse block diagonal matrix by repeating M n times
-  
-  Args:
-      M (2d numpy array): matrix to be repeated
-      n (float): number of times to repeat
-  """
-  return sparse.block_diag([M for i in range(n)])
+from .controller_aux import block_diag, build_boldAB
 
 
 class RobustMpcDense(Controller):
@@ -34,10 +25,21 @@ class RobustMpcDense(Controller):
 
     Use lifting=True to solve MPC in the lifted space
     """
-    def __init__(self, linear_dynamics, N, dt, umin, umax, xmin, xmax, 
-                Q, R, QN, xr, plotMPC=False, plotMPC_filename="",lifting=False, edmd_object=None, name="noname", soft=False, D=None):
+    def __init__(self, linear_dynamics, N, dt, 
+                umin, umax, xmin, xmax, 
+                Q, R, QN, xr, 
+                plotMPC_filename=None,
+                edmd_object=None, 
+                name="noname", 
+                D=None,
+                ensemble=None,
+                gather_thoughts=False):
         """__init__ [summary]
         
+        osqp state: 
+        hard constraints [state row [Ns Nt], control [Nu Nt]]
+        soft constraints [state row [Ns Nt], control [Nu Nt], slack [2Ns Nt]]
+
         Arguments:
             linear_dynamics {dynamical sytem} -- it contains the A and B matrices in continous time
             N {integer} -- number of timesteps
@@ -58,7 +60,7 @@ class RobustMpcDense(Controller):
             edmd_object {edmd object} -- lifting object. It contains projection matrix and lifting function (default: {Edmd()})
             name {str} -- name for all saved files (default: {"noname"})
             soft {bool} -- flag to enable soft constraints (default: {False})
-            D {[type]} -- cost matrix for the soft variables (default: {None})
+            D {numpy array []} -- cost matrix for the soft variables (default: {None})
         """
 
         Controller.__init__(self, linear_dynamics)
@@ -68,29 +70,37 @@ class RobustMpcDense(Controller):
         [nx, nu] = Bc.shape
         ns = xr.shape[0]
 
-        #Discretize dynamics:
-        self.dt = dt
-        if lifting:
+        if edmd_object is not None:
             self.C = edmd_object.C
             self.edmd_object = edmd_object
+            self.lifting = True
         else:
+            self.lifting = False
             self.C = sparse.eye(ns)
-        lin_model_d = sp.signal.cont2discrete((Ac,Bc,self.C,zeros((ns,1))),dt)
-        Ad = sparse.csc_matrix(lin_model_d[0]) #TODO: If bad behavior, delete this
-        Bd = sparse.csc_matrix(lin_model_d[1]) #TODO: If bad behavior, delete this
-        self.plotMPC = plotMPC
-        self.plotMPC_filename = plotMPC_filename
-        self.q_d = xr
+            
+        if plotMPC_filename is not None:
+            self.plotMPC = True
+            self.plotMPC_filename = plotMPC_filename
+        else:
+            self.plotMPC = False
 
+        if D is not None:
+            self.soft = True
+            self.D = D
+        else:
+            self.soft = False
+
+        self.dt = dt
+        self.q_d = xr
 
         self.Q = Q
         self.R = R
-        self.lifting = lifting
 
         self.nu = nu
         self.nx = nx
         self.ns = ns
-        self.soft = soft
+        
+        
 
         # Total desired path
         if self.q_d.ndim==2:
@@ -101,14 +111,13 @@ class RobustMpcDense(Controller):
         self.N = N
         x0 = np.zeros(nx)
         self.run_time = np.zeros([0,])
+
+        # thoughts
+        self.gather_thoughts = gather_thoughts
+        if self.gather_thoughts: 
+            self.xe_th = []
+            self.u_th = []
                
-
-        Rbd = sparse.kron(sparse.eye(N), R)
-        Qbd = sparse.kron(sparse.eye(N), Q)
-        Bbd = block_diag(Bd,nu).tocoo()
-
-
-
 
         # Check Xmin and Xmax
         if  xmin.shape[0]==ns and xmin.ndim==1: # it is a single vector we tile it
@@ -141,79 +150,27 @@ class RobustMpcDense(Controller):
         self.u_min_flat = u_min_flat 
         self.u_max_flat = u_max_flat 
 
-        #! GET a & b
-        # Write B:
-        diag_AkB = Bd
-        data_list = Bbd.data
-        row_list = Bbd.row
-        col_list = Bbd.col
-        B = sparse.coo_matrix
-        for i in range(N):
-            if i<N-1:
-                AkB_bd_temp = block_diag(diag_AkB,N-i)
-            else:
-                AkB_bd_temp = diag_AkB.tocoo()
-            data_list = np.hstack([data_list,AkB_bd_temp.data])
-            row_list  = np.hstack([row_list,AkB_bd_temp.row+np.full((AkB_bd_temp.row.shape[0],),nx*i)])
-            col_list  = np.hstack([col_list,AkB_bd_temp.col])
+        self.ensemble = ensemble
+        if ensemble is not None:
+            self.Ne = ensemble.shape[2]
+            self.bA_e = []
+            self.bB_e = []
+            for i in range(self.Ne):
+                lin_model_e = sp.signal.cont2discrete((Ac,ensemble[:,:,i],self.C,zeros((ns,1))),dt)
+                Ad_e = sparse.csc_matrix(lin_model_e[0]) 
+                Bd_e = sparse.csc_matrix(lin_model_e[1]) 
+                a_temp, B_temp = build_boldAB( Ad_e, Bd_e, N)
+                self.bA_e.append(a_temp)
+                self.bB_e.append(B_temp)
 
-            diag_AkB = Ad.dot(diag_AkB)            
-
-        B = sparse.coo_matrix((data_list, (row_list, col_list)), shape=(N*nx, N*nu))
-
-        a = Ad.copy()
-        Ak = Ad.copy()
-        for i in range(N-1):
-            Ak = Ak.dot(Ad)
-            a = sparse.vstack([a,Ak])    
-
-        
+        lin_model_d = sp.signal.cont2discrete((Ac,Bc,self.C,zeros((ns,1))),dt)
+        a,B = build_boldAB( sparse.csc_matrix(lin_model_d[0]), sparse.csc_matrix(lin_model_d[1]) , N)
         self.a = a
         self.B = B
 
-        check_ab = True
-        if check_ab:
-            x0  = np.linspace(-5,40,nx)
-            x00 = np.linspace(-5,40,nx)
-            # Store data Init
-            nsim = N
-            xst = np.zeros((nx,nsim))
-            ust = np.zeros((nu,nsim))
-
-            # Simulate in closed loop
-
-            for i in range(nsim):
-                # Fake pd controller
-                ctrl = np.zeros(nu,) #np.random.rand(nu,)
-                x0 = Ad.dot(x0) + Bd.dot(ctrl)
-
-                # Store Data
-                xst[:,i] = x0
-                ust[:,i] = ctrl
-
-            x_dense = np.reshape(a @ x00 + B @ (ust.flatten('F')),(N,nx)).T
-
-            plt.figure()
-            plt.subplot(2,1,1)
-            for i in range(nx):
-                plt.plot(range(nsim),xst[i,:],'d',label="sim "+str(i))
-                plt.plot(range(nsim),x_dense[i,:],'d',label="ax+bu "+str(i))
-            plt.xlabel('Time(s)')
-            plt.grid()
-            plt.legend()
-
-            plt.subplot(2,1,2)
-            for i in range(nu):
-                plt.plot(range(nsim),ust[i,:],label=str(i))
-            plt.xlabel('Time(s)')
-            plt.grid()
-            plt.legend()
-            plt.savefig("AB_check_for_"+name+".pdf",bbox_inches='tight',format='pdf', dpi=2400)
-            plt.close()
-
-
-        # Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
- 
+        # Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1)) 
+        Rbd = sparse.kron(sparse.eye(N), R)
+        Qbd = sparse.kron(sparse.eye(N), Q)
 
         # Compute Block Diagonal elements
         self.Cbd = sparse.kron(sparse.eye(N), self.C)
@@ -221,29 +178,46 @@ class RobustMpcDense(Controller):
         self.CtQ = self.C.T @ Q
         Cbd = self.Cbd
         
-            
+        # Compute quadratic cost matrix
         P = Rbd + B.T @ CQCbd @ B            
 
-            
+        # Compute linear cost vector
         self.BTQbda =  B.T @ CQCbd @ a            
-        Aineq_x = Cbd @ B
-
-        xrQB  = B.T @ np.reshape(self.CtQ.dot(xr),(N*nx,),order='F')
-        l = np.hstack([x_min_flat - Cbd @ a @ x0, u_min_flat])
-        u = np.hstack([x_max_flat - Cbd @ a @ x0, u_max_flat])
-
-        x0aQb = self.BTQbda @ x0
-        q = x0aQb - xrQB 
         Aineq_u = sparse.eye(N*nu)
-        A = sparse.vstack([Aineq_x, Aineq_u]).tocsc()
+        x0aQb = self.BTQbda @ x0
+        xrQB  = B.T @ np.reshape(self.CtQ.dot(xr),(N*nx,),order='F')
+        q = x0aQb - xrQB 
 
-        if soft:
-            Pdelta = sparse.kron(sparse.eye(N), D)
-            P = sparse.block_diag([P,Pdelta])
-            qdelta = np.zeros(N*ns)
-            q = np.hstack([q,qdelta])
-            Adelta = sparse.csc_matrix(np.vstack([np.eye(N*ns),np.zeros((N*nu,N*ns))]))
+        # Compute inequalities
+        if ensemble is not None:
+            l = u_min_flat
+            u = u_max_flat
+            for i in range(self.Ne ):
+                l = np.hstack([x_min_flat - Cbd @ self.bA_e[i] @ x0,l])
+                u = np.hstack([x_max_flat - Cbd @ self.bA_e[i] @ x0,u])
+
+            A = Aineq_u.tocsc()
+            for i in range(self.Ne ):
+                A = sparse.vstack([Cbd @ self.bB_e[i],A]).tocsc()
+        else:
+            l = np.hstack([x_min_flat - Cbd @ a @ x0, u_min_flat])
+            u = np.hstack([x_max_flat - Cbd @ a @ x0, u_max_flat])
+
+            Aineq_x = Cbd @ B
+            A = sparse.vstack([Aineq_x, Aineq_u]).tocsc()
+
+        if self.soft:
+            if ensemble is not None:
+                Nineq = N*self.Ne
+            else:
+                Nineq = N
+            self.Nineq = Nineq
+            Pdelta = sparse.kron(sparse.eye(Nineq), D)
+            qdelta = np.zeros(Nineq*ns)
+            Adelta = sparse.csc_matrix(np.vstack([np.eye(Nineq*ns),np.zeros((N*nu,Nineq*ns))]))
             A = sparse.hstack([A, Adelta])
+            q = np.hstack([q,qdelta])
+            P = sparse.block_diag([P,Pdelta])
 
         plot_matrices = False
         if plot_matrices:
@@ -282,16 +256,27 @@ class RobustMpcDense(Controller):
             plt.title("q in $J=u^TPu+q^Tu$")
             plt.grid()
             plt.tight_layout()
-            plt.savefig("MPC_matrices_for_"+name+".pdf",bbox_inches='tight',format='pdf', dpi=2400)
-            plt.close()
-            #plt.show()
+            #plt.savefig("MPC_matrices_for_"+name+".pdf",bbox_inches='tight',format='pdf', dpi=2400)
+            #plt.close()
+            plt.show()
+
+
+            if ensemble is not None:
+                fig = plt.figure()
+                for i in range(self.Ne):
+                    plt.subplot(self.Ne,1,i+1)
+                    plt.imshow(self.bB_e[i].toarray(),  interpolation='nearest', cmap=cm.Greys_r)
+                    plt.title(f"b in $x=ax_0+bu$ b={ensemble[1,0,i]}")
+
+
+                plt.show()
+
 
         # Create an OSQP object
         self.prob = osqp.OSQP()
+
         # Setup workspace
-
         self.prob.setup(P=P.tocsc(), q=q, A=A, l=l, u=u, warm_start=True, verbose=False)
-
 
         if self.plotMPC:
             # Figure to plot MPC thoughts
@@ -299,7 +284,7 @@ class RobustMpcDense(Controller):
             if nx==4:
                 ylabels = ['$x$', '$\\theta$', '$\\dot{x}$', '$\\dot{\\theta}$']
             else:
-                ylabels = [str(i) for i in range(nx)]
+                ylabels = [f"state {i}" for i in range(nx)]
 
             for ii in range(self.ns):
                 self.axs[ii].set(xlabel='Time(s)',ylabel=ylabels[ii])
@@ -308,7 +293,6 @@ class RobustMpcDense(Controller):
                 self.axs[ii].set(xlabel='Time(s)',ylabel='u')
                 self.axs[ii].grid()
 
-
     def eval(self, x, t):
         '''
         Args:
@@ -316,16 +300,11 @@ class RobustMpcDense(Controller):
         - time, t, float
         '''
         time_eval0 = time.time()
-        N = self.N
-        nu = self.nu
-        nx = self.nx
-        ns = self.ns
+        N, ns, nu, nx = [self.N, self.ns, self.nu, self.nx]
+        self.x0 = x
 
-
-
-        tindex = int(np.ceil(t/self.dt))  #TODO: Remove ceil and add back +1 if bad performance
+        tindex = int(np.ceil(t/self.dt)) 
             
-        #print("Eval at t={:.2f}, x={}".format(t,x))
         # Update the local reference trajectory
         if (tindex+N) < self.Nqd: # if we haven't reach the end of q_d yet
             xr = self.q_d[:,tindex:tindex+N]
@@ -335,24 +314,30 @@ class RobustMpcDense(Controller):
         # Construct the new _osqp_q objects
         if (self.lifting):
             x = np.transpose(self.edmd_object.lift(x.reshape((x.shape[0],1)),xr[:,0].reshape((xr.shape[0],1))))[:,0]
-            #print("Eval at t={:.2f}, z={}".format(t,x))
 
-            #x = self.edmd_object.lift(x,xr[:,0])
             BQxr  = self.B.T @ np.reshape(self.CtQ.dot(xr),(N*nx,),order='F')
+        else:
+            BQxr  = self.B.T @ np.reshape(self.Q.dot(xr),(N*nx,),order='F')
+
+
+        if self.ensemble is not None:
+            l = self.u_min_flat
+            u = self.u_max_flat
+            for i in range(self.Ne):
+                l = np.hstack([self.x_min_flat - self.Cbd @ self.bA_e[i] @ x,l])
+                u = np.hstack([self.x_max_flat - self.Cbd @ self.bA_e[i] @ x,u])
+        else:
             l = np.hstack([self.x_min_flat - self.Cbd @ self.a @ x, self.u_min_flat])
             u = np.hstack([self.x_max_flat - self.Cbd @ self.a @ x, self.u_max_flat])
 
-        else:
-            BQxr  = self.B.T @ np.reshape(self.Q.dot(xr),(N*nx,),order='F')
-            l = np.hstack([self.x_min_flat - self.a @ x, self.u_min_flat])
-            u = np.hstack([self.x_max_flat - self.a @ x, self.u_max_flat])
 
         # Update initial state
         BQax0 = self.BTQbda @ x
         q = BQax0  - BQxr
 
         if self.soft:
-            q = np.hstack([q,np.zeros(N*ns)])        
+            qdelta = np.zeros(self.Nineq*ns)
+            q = np.hstack([q,qdelta])        
 
         self.prob.update(q=q,l=l,u=u)
 
@@ -366,17 +351,32 @@ class RobustMpcDense(Controller):
 
         # Check solver status
         if self._osqp_result.info.status != 'solved':
-            print('ERROR: MPC DENSE coudl not be solved at t ={}, x = {}'.format(t, x))
+            print(f'ERROR: MPC DENSE coudl not be solved at t ={t}, x = {x}')
             raise ValueError('OSQP did not solve the problem!')
 
         if self.plotMPC:
             self.plot_MPC(t, x, xr, tindex)
 
         self.run_time = np.append(self.run_time,self._osqp_result.info.run_time)
+        self.uoutput = self._osqp_result.x[:nu]
 
-        return  self._osqp_result.x[:nu]
+        if self.gather_thoughts:            
+            self.xe_th.append(self.get_ensemble_state_prediction())
+            self.u_th.append(self.get_control_prediction())
 
-    def parse_result(self,x,u):
+        return  self.uoutput
+
+    def get_state_prediction(self):
+        u_flat = self._osqp_result.x[:self.nu*self.N]
+        return np.reshape(self.a @ self.x0 + self.B @ u_flat,(self.N,self.nx)).T 
+
+    def get_ensemble_state_prediction(self):
+        u_flat = self._osqp_result.x[:self.nu*self.N]
+        z_b = [np.reshape(self.bA_e[i] @ self.x0 + self.bB_e[i] @ u_flat,(self.N,self.nx)).T  for i in range(self.Ne)]
+        return z_b
+ 
+
+    def use_u(self,x,uraw):
         """parse_result obtain state from MPC optimization
         
         Arguments:
@@ -386,7 +386,11 @@ class RobustMpcDense(Controller):
         Returns:
             numpy array [Ns,N] -- state in the MPC optimization
         """
-        return  np.transpose(np.reshape( self.a @ x + self.B @ u, (self.N+1,self.nx)))
+        u = uraw.reshape(self.N*self.nu)
+        return  np.transpose(np.reshape( self.a @ x + self.B @ u, (self.N,self.nx)))
+
+    def get_thoughts_traj(self):
+        return self.xe_th, self.u_th
 
     def get_control_prediction(self):
         """get_control_prediction parse control command from MPC optimization
@@ -407,9 +411,7 @@ class RobustMpcDense(Controller):
         """
 
         #* Unpack OSQP results
-        nu = self.nu
-        nx = self.nx
-        N = self.N
+        N, ns, nu = [self.N, self.ns, self.nu]
 
         u_flat = self._osqp_result.x
         osqp_sim_state =  np.reshape(self.a @ x0 + self.B @ u_flat,(N,nx)).T
@@ -486,9 +488,6 @@ class RobustMpcDense(Controller):
             P = Rbd + B.T @ Qbd @ B
             self.BTQbda =  B.T @ Qbd @ a
             self.prob.update(P=P,l=l,u=u) """
-
-        
-        
             
     def finish_plot(self, x, u, u_pd, time_vector, filename):
         """

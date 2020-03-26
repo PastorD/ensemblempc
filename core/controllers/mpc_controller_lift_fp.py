@@ -179,47 +179,6 @@ class MPCControllerFast(Controller):
         self.a = a
         self.B = B
 
-        # check_ab = True
-        # if check_ab:
-        #     x0  = np.linspace(-5,40,nx)
-        #     x00 = np.linspace(-5,40,nx)
-        #     # Store data Init
-        #     nsim = N
-        #     xst = np.zeros((nx,nsim))
-        #     ust = np.zeros((nu,nsim))
-
-        #     # Simulate in closed loop
-
-        #     for i in range(nsim):
-        #         # Fake pd controller
-        #         ctrl = np.zeros(nu,) #np.random.rand(nu,)
-        #         x0 = Ad.dot(x0) + Bd.dot(ctrl)
-
-        #         # Store Data
-        #         xst[:,i] = x0
-        #         ust[:,i] = ctrl
-
-        #     x_dense = np.reshape(a @ x00 + B @ (ust.flatten('F')),(N,nx)).T
-
-        #     plt.figure()
-        #     plt.subplot(2,1,1)
-        #     for i in range(nx):
-        #         plt.plot(range(nsim),xst[i,:],'d',label="sim "+str(i))
-        #         plt.plot(range(nsim),x_dense[i,:],'d',label="ax+bu "+str(i))
-        #     plt.xlabel('Time(s)')
-        #     plt.grid()
-        #     plt.legend()
-
-        #     plt.subplot(2,1,2)
-        #     for i in range(nu):
-        #         plt.plot(range(nsim),ust[i,:],label=str(i))
-        #     plt.xlabel('Time(s)')
-        #     plt.grid()
-        #     plt.legend()
-        #     plt.savefig("AB_check_for_"+name+".png",bbox_inches='tight')
-        #     plt.close()
-
-
         # Cast MPC problem to a QP: x = (x(0),x(1),...,x(N),u(0),...,u(N-1))
         if (self.lifting):
             # Compute Block Diagonal elements

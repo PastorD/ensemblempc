@@ -26,10 +26,10 @@ class Keedmd(Edmd):
         if self.l1 == 0.:
             # Solve least squares problem to find A and B for velocity terms:
             if self.episodic:
-                input_vel = concatenate((Z,U-U_nom),axis=0).transpose()
+                input_vel = concatenate((Z, U-U_nom),axis=0).T
             else:
-                input_vel = concatenate((Z, U), axis=0).transpose()
-            output_vel = Z_dot[int(self.n/2):self.n,:].transpose()
+                input_vel = concatenate((Z, U), axis=0).T
+            output_vel = Z_dot[int(self.n/2):self.n,:].T
             sol_vel = atleast_2d(dot(linalg.pinv(input_vel),output_vel).transpose())
             A_vel = sol_vel[:,:self.n_lift]
             B_vel = sol_vel[:,self.n_lift:]
@@ -42,15 +42,16 @@ class Keedmd(Edmd):
 
             # Solve least squares problem to find B for position terms:
             if self.episodic:
-                input_pos = (U-U_nom).transpose()
+                input_pos = (U-U_nom).T
             else:
-                input_pos = U.transpose()
-            output_pos = (Z_dot[:int(self.n/2),:]-dot(self.A[:int(self.n/2),:],Z)).transpose()
+                input_pos = U.T
+            output_pos = (Z_dot[:int(self.n/2),:]-dot(self.A[:int(self.n/2),:],Z)).T
             B_pos = atleast_2d(dot(linalg.pinv(input_pos),output_pos).transpose())
 
             # Solve least squares problem to find B for eigenfunction terms:
-            input_eig = (U - U_nom).transpose()
-            output_eig = (Z_dot[self.n:, :] - dot(self.A[self.n:, :], Z)).transpose()
+            U_state_fb = dot(concatenate((self.K_p, self.K_d), axis=1), X)
+            input_eig = (U - U_state_fb).T
+            output_eig = (Z_dot[self.n:, :] - dot(self.A[self.n:, :], Z)).T
             B_eig = atleast_2d(dot(linalg.pinv(input_eig), output_eig).transpose())
 
             # Construct B matrix:
@@ -68,10 +69,10 @@ class Keedmd(Edmd):
 
             # Solve least squares problem to find A and B for velocity terms:
             if self.episodic:
-                input_vel = concatenate((Z, U-U_nom), axis=0).transpose()
+                input_vel = concatenate((Z, U-U_nom), axis=0).T
             else:
-                input_vel = concatenate((Z, U), axis=0).transpose()
-            output_vel = Z_dot[int(self.n / 2):self.n, :].transpose()
+                input_vel = concatenate((Z, U), axis=0).T
+            output_vel = Z_dot[int(self.n / 2):self.n, :].T
 
 
             reg_model.fit(input_vel, output_vel)
@@ -88,17 +89,19 @@ class Keedmd(Edmd):
 
             # Solve least squares problem to find B for position terms:
             if self.episodic:
-                input_pos = (U-U_nom).transpose()
+                input_pos = (U-U_nom).T
             else:
-                input_pos = U.transpose()
-            output_pos = (Z_dot[:int(self.n / 2), :] - dot(self.A[:int(self.n / 2), :], Z)).transpose()
+                input_pos = U.T
+            output_pos = (Z_dot[:int(self.n / 2), :] - dot(self.A[:int(self.n / 2), :], Z)).T
             reg_model.fit(input_pos, output_pos)
             B_pos = atleast_2d(reg_model.coef_)
 
 
             # Solve least squares problem to find B for eigenfunction terms:
-            input_eig = (U - U_nom).transpose()
-            output_eig = (Z_dot[self.n:, :] - dot(self.A[self.n:, :], Z)).transpose()
+            #input_eig = (U - U_nom).T
+            U_state_fb = dot(concatenate((self.K_p, self.K_d), axis=1),X)
+            input_eig = (U - U_state_fb).T
+            output_eig = (Z_dot[self.n:, :] - dot(self.A[self.n:, :], Z)).T
             reg_model.fit(input_eig, output_eig)
             B_eig = atleast_2d(reg_model.coef_)
 
@@ -121,20 +124,17 @@ class Keedmd(Edmd):
             #B_apnd[self.n:,:] = -self.B[self.n:, :]
             #self.B = concatenate((self.B,B_apnd), axis=1)
 
+    def tune_fit(self, X, X_d, Z, Z_dot, U, U_nom, l1_ratio=array([1])):
 
-
-    def tune_fit(self, X, X_d, Z, Z_dot, U, U_nom):
-
-        l1_ratio = array([.1, .7, .9, .95, .99, 1])  # Values to test
         reg_model_cv = linear_model.MultiTaskElasticNetCV(l1_ratio=l1_ratio, fit_intercept=False,
                                             normalize=False, cv=5, n_jobs=-1, selection='random', max_iter=1e5)
 
         # Solve least squares problem to find A and B for velocity terms:
         if self.episodic:
-            input_vel = concatenate((Z, U - U_nom), axis=0).transpose()
+            input_vel = concatenate((Z, U - U_nom), axis=0).T
         else:
-            input_vel = concatenate((Z, U), axis=0).transpose()
-        output_vel = Z_dot[int(self.n / 2):self.n, :].transpose()
+            input_vel = concatenate((Z, U), axis=0).T
+        output_vel = Z_dot[int(self.n / 2):self.n, :].T
 
         reg_model_cv.fit(input_vel, output_vel)
 
@@ -152,18 +152,18 @@ class Keedmd(Edmd):
 
         # Solve least squares problem to find B for position terms:
         if self.episodic:
-            input_pos = (U - U_nom).transpose()
+            input_pos = (U - U_nom).T
         else:
-            input_pos = U.transpose()
-        output_pos = (Z_dot[:int(self.n / 2), :] - dot(self.A[:int(self.n / 2), :], Z)).transpose()
+            input_pos = U.T
+        output_pos = (Z_dot[:int(self.n / 2), :] - dot(self.A[:int(self.n / 2), :], Z)).T
         reg_model_cv.fit(input_pos, output_pos)
         B_pos = atleast_2d(reg_model_cv.coef_)
         self.l1_pos = reg_model_cv.alpha_
         self.l1_ratio_pos = reg_model_cv.l1_ratio_
 
         # Solve least squares problem to find B for eigenfunction terms:
-        input_eig = (U - U_nom).transpose()
-        output_eig = (Z_dot[self.n:, :] - dot(self.A[self.n:, :], Z)).transpose()
+        input_eig = (U - U_nom).T
+        output_eig = (Z_dot[self.n:, :] - dot(self.A[self.n:, :], Z)).T
         reg_model_cv.fit(input_eig, output_eig)
         B_eig = atleast_2d(reg_model_cv.coef_)
         self.l1_eig = reg_model_cv.alpha_
@@ -189,6 +189,5 @@ class Keedmd(Edmd):
 
     def lift(self, X, X_d):
         Z = self.basis.lift(X, X_d)
-        output_norm = divide(concatenate((X.transpose(), Z),axis=1),self.Z_std.transpose())
+        output_norm = divide(concatenate((X.T, Z),axis=1),self.Z_std.transpose())
         return output_norm
-

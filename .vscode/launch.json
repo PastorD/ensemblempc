@@ -3,10 +3,10 @@
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": [        
-    
+    "configurations": [       
+
         {
-            "name": "1D drone",
+            "name": "1d_drone",
             "type": "python",
             "request": "launch",
             "module": "core.examples.1d_drone_landing"
@@ -16,6 +16,12 @@
             "type": "python",
             "request": "launch",
             "module": "core.examples.linear_estimation_playground"
+        },
+        {
+            "name": "plotly 1d",
+            "type": "python",
+            "request": "launch",
+            "module": "core.examples.1d_plotly"
         }
     ]
 }
