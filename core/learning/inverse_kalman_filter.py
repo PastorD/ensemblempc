@@ -88,12 +88,12 @@ class InverseKalmanFilter(Learner):
             print(f"ctrl")
         
 
-    def fit(self, X, X_dot, U):
+    def fit(self, X, U):
         """
         Fit a learner
 
         Inputs:
-        - X: state with all trajectories, list [Ntraj] numpy 3d array [ns,Nt]
+        - X: state with all trajectories, list [Ntraj] numpy array [ns,Nt]
         - X_dot: time derivative of the state
         - U: control input, numpy 3d array [NtrajxN, nu]
         - t: time, numpy 2d array [Ntraj, N]
@@ -124,7 +124,7 @@ class InverseKalmanFilter(Learner):
 
 
         
-        shrink_debug = False
+        shrink_debug = True
         if (shrink_debug):
             shrink_rate = 0.6
             B_mean = np.mean(self.B_ensemble,axis=2)

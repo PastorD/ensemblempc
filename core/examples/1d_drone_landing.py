@@ -43,7 +43,7 @@ R = np.array([[1.]])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
-xmin=np.array([ground_altitude, -10.])
+xmin=np.array([-10, -10.])
 xmax=np.array([10., 10.])
 ref = np.array([[ground_altitude+0.01 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
@@ -87,18 +87,18 @@ for ep in range(N_ep):
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
     controller = MPCController(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref)  # TODO: Implement Robust MPC
     x_tmp, u_tmp = system.simulate(z_0, controller, t_eval)
-    x_ep.append(x_tmp)
+    x_ep.append(x_tmp.T)
     xd_ep.append(np.transpose(ref).tolist())
-    u_ep.append(u_tmp)
+    u_ep.append(u_tmp.T)
     t_ep.append(t_eval.tolist())
     mpc_cost_ep.append(np.sum(np.diag((x_tmp[:-1,:].T-ref[:,:-1]).T@Q@(x_tmp[:-1,:].T-ref[:,:-1]) + u_tmp@R@u_tmp.T)))
     if ep == N_ep-1:
         break
 
     # Update the ensemble of Bs with inverse Kalman filter:
-    x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
-                                                                               np.array(u_ep), np.array(t_ep))
-    inverse_kalman_filter.fit(x_flat, xdot_flat, u_flat) 
+    #x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
+    #                                                                           np.array(u_ep), np.array(t_ep))
+    inverse_kalman_filter.fit(x_ep, u_ep) 
     B_ep.append(inverse_kalman_filter.B_ensemble)
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.array(u_ep), np.array(traj_ep), \
@@ -171,10 +171,10 @@ b1_lst, b2_lst = [], []
 for ii in range(3):
     b1_lst.append(f2.add_subplot(gs2[1, ii]))
     b1_lst[ii].plot([t_eval[0], t_eval[-1]], [ground_altitude, ground_altitude], '--r', lw=2, label='Ground constraint')
-    b1_lst[ii].plot(t_eval, x_ep[plot_ep[ii], :, 0], label='z')
-    b1_lst[ii].fill_between(t_eval, ref[0,:], x_ep[plot_ep[ii], :, 0], alpha=0.2)
-    b1_lst[ii].plot(t_eval, x_ep[plot_ep[ii], :, 1], label='$\dot{z}$')
-    err_norm = (t_eval[-1]-t_eval[0])*np.sum(np.square(x_ep[plot_ep[ii], :, 0].T - ref[0,:]))/x_ep[plot_ep[ii], :, 0].shape[0]
+    b1_lst[ii].plot(t_eval, x_ep[plot_ep[ii], 0, :], label='z')
+    b1_lst[ii].fill_between(t_eval, ref[0,:], x_ep[plot_ep[ii], 0, :], alpha=0.2)
+    b1_lst[ii].plot(t_eval, x_ep[plot_ep[ii], 1, :], label='$\dot{z}$')
+    err_norm = (t_eval[-1]-t_eval[0])*np.sum(np.square(x_ep[plot_ep[ii], 0, :].T - ref[0,:]))/x_ep[plot_ep[ii], 0, :].shape[0]
     b1_lst[ii].text(1.2, 0.5, "$\int (z-z_d)^2=${0:.2f}".format(err_norm))
 
     b1_lst[ii].set_title('Executed trajectory, ep ' + str(plot_ep[ii]))
@@ -183,10 +183,10 @@ for ii in range(3):
     b1_lst[ii].grid()
 
     b2_lst.append(f2.add_subplot(gs2[2, ii]))
-    b2_lst[ii].plot(t_eval[:-1], u_ep[plot_ep[ii], :, 0], label='T')
+    b2_lst[ii].plot(t_eval[:-1], u_ep[plot_ep[ii], 0, :], label='T')
     b2_lst[ii].plot([t_eval[0], t_eval[-2]], [umax+T_hover, umax+T_hover], '--r', lw=2, label='Max thrust')
-    b2_lst[ii].fill_between(t_eval[:-1], np.zeros_like(u_ep[plot_ep[ii], :, 0]), u_ep[plot_ep[ii], :, 0], alpha=0.2)
-    ctrl_norm = (t_eval[-2] - t_eval[0]) * np.sum((np.square(u_ep[plot_ep[ii], :, 0]))/u_ep[plot_ep[ii], :, 0].shape[0])
+    b2_lst[ii].fill_between(t_eval[:-1], np.zeros_like(u_ep[plot_ep[ii], 0, :]), u_ep[plot_ep[ii], 0, :], alpha=0.2)
+    ctrl_norm = (t_eval[-2] - t_eval[0]) * np.sum((np.square(u_ep[plot_ep[ii], 0, :]))/u_ep[plot_ep[ii], 0, :].shape[0])
     b2_lst[ii].text(1.2, 11, "$\int u_n^2=${0:.2f}".format(ctrl_norm))
     b2_lst[ii].set_title('Executed control effort, ep ' + str(plot_ep[ii]))
     b2_lst[ii].set_xlabel('Time (sec)')
