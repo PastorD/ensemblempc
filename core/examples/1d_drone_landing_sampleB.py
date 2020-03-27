@@ -84,7 +84,7 @@ for j in range(N_sampling):
     
     controller_ensemble = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)          
     x_tmp, u_tmp = system.simulate(z_0, controller_ensemble, t_eval) 
-    x_ensemble.append(x_tmp) # x_raw [N_sampling][Nt][Ns,]_NumpyArray
+    x_ensemble.append(x_tmp.T) # x_raw [N_sampling][Ns,Nt]_NumpyArray
     #for x in x_tmp:
     #    if ( abs(x[])
     

@@ -100,7 +100,7 @@ class InverseKalmanFilter(Learner):
         """
         Ntraj = len(X)
         
-        debug = True
+        debug = False
         if debug:
             plt.figure()
             plt.subplot(2,1,1,xlabel="time", ylabel="X")
@@ -124,7 +124,7 @@ class InverseKalmanFilter(Learner):
 
 
         
-        shrink_debug = True
+        shrink_debug = False
         if (shrink_debug):
             shrink_rate = 0.5
             B_mean = np.mean(self.B_ensemble,axis=2)

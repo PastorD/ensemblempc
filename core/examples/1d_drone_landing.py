@@ -34,21 +34,21 @@ Nu = B_mean.shape[1]
 # Define simulation parameters:
 z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
-t_max = 1.5                                                 # End time (sec)
+t_max = 2.5                                                 # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 3                                                    # Number of episodes
+N_ep = 10                                                    # Number of episodes
 
 # Model predictive controller parameters:
-Q = np.array([[1e3, 0.], [0., 1.]])
+Q = np.array([[4e3, 0.], [0., 1.]])
 QN = Q
 R = np.array([[1e1]])
-Dmatrix = sp.sparse.diags([5000,3000])
+Dmatrix = sp.sparse.diags([1e5,1000])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
 xmin=np.array([ground_altitude, -5.])
 xmax=np.array([10., 5.])
-ref = np.array([[ground_altitude+0.025 for _ in range(N_steps+1)],
+ref = np.array([[ground_altitude+0.03 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
 
 #! Filter Parameters:
