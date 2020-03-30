@@ -51,6 +51,7 @@ xmax=np.array([10., 5.])
 set_pt = ground_altitude+0.1
 ref = np.array([[set_pt for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
+ctrl_pert_var = 0.5
 
 # Filter Parameters:
 eta = 0.6**2 # measurement covariance
@@ -77,11 +78,11 @@ diff_dropout_prob = 0.25                                # Dropout rate
 
 # - EDMD Regularization Parameters:
 tune_keedmd = False
-l1_pos_keedmd = 6.90225469066697e-07                    # l1 regularization strength for position states
+l1_pos_keedmd = 3.0884189986943714e-06                    # l1 regularization strength for position states
 l1_pos_ratio_keedmd = 1.0                               # l1-l2 ratio for position states
-l1_vel_keedmd = 0.03392536629651686                     # l1 regularization strength for velocity states
+l1_vel_keedmd = 0.039883772238169565                     # l1 regularization strength for velocity states
 l1_vel_ratio_keedmd = 1.0                               # l1-l2 ratio for velocity states
-l1_eig_keedmd = 1e-15                                   # l1 regularization strength for eigenfunction states
+l1_eig_keedmd = 0.3988140567855022                                   # l1 regularization strength for eigenfunction states
 l1_eig_ratio_keedmd = 1                                 # l1-l2 ratio for eigenfunction states
 
 Neig = (eigenfunction_max_power+1)**Ns
@@ -89,9 +90,9 @@ E_keedmd = np.array([0,-gravity*mass])
 E_keedmd = np.concatenate((E_keedmd, np.zeros(Neig)))
 B_mean_keedmd = np.concatenate((B_mean, np.zeros((Neig, Nu))))
 B_ensemble_keedmd = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
-B_ensemble_keedmd = np.stack([np.concatenate((B_ensemble_keedmd[:,:,0], np.zeros((Neig,Nu)))),
+B_ensemble_keedmd = np.stack([np.concatenate((B_ensemble_keedmd[:,:,0], -0.1*np.ones((Neig,Nu)))),
                                 B_mean_keedmd,
-                                np.concatenate((B_ensemble_keedmd[:,:,2], np.zeros((Neig,Nu))))], axis=2)
+                                np.concatenate((B_ensemble_keedmd[:,:,2], 0.1*np.ones((Neig,Nu))))], axis=2)
 A_keedmd = np.zeros((Neig+Ns, Neig+Ns))
 A_keedmd[:Ns,:Ns] = A
 C_keedmd = np.zeros((Ns, Neig+Ns))
@@ -150,8 +151,8 @@ BK = np.dot(B_mean, np.concatenate((K_p, K_d),axis=1))
 eigenfunction_basis = KoopmanEigenfunctions(n=Ns, max_power=eigenfunction_max_power, A_cl=A_cl, BK=BK)
 eigenfunction_basis.build_diffeomorphism_model(jacobian_penalty=jacobian_penalty_diffeomorphism, n_hidden_layers = diff_n_hidden_layers, layer_width=diff_layer_width, batch_size= diff_batch_size, dropout_prob=diff_dropout_prob)
 
-x_ep, xd_ep, u_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], []
-x_ep_keedmd, xd_ep_keedmd, u_ep_keedmd, traj_ep_keedmd, B_ep_keedmd, mpc_cost_ep_keedmd, t_ep_keedmd = [], [], [], [], [], [], []
+x_ep, xd_ep, u_ep, u_nom_ep, traj_ep, B_ep, mpc_cost_ep, t_ep = [], [], [], [], [], [], [], []
+x_ep_keedmd, xd_ep_keedmd, u_ep_keedmd, u_nom_ep_keedmd, traj_ep_keedmd, B_ep_keedmd, mpc_cost_ep_keedmd, t_ep_keedmd = [], [], [], [], [], [], [], []
 x_th, u_th  = [], []
 # B_ensemble [Ns,Nu,Ne] numpy array
 B_ep.append(B_ensemble) # B_ep[N_ep] of numpy array [Ns,Nu,Ne]
@@ -170,35 +171,43 @@ for ep in range(N_ep):
 
     # Design robust MPC with current ensemble of Bs and execute experiment state space model:
     lin_dyn = LinearSystemDynamics(A, B_ep[-1][:,:,1])
-    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ensemble, D=Dmatrix)
-    x_tmp, u_tmp = system.simulate(z_0, controller, t_eval) 
+    controller = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ep[-1], D=Dmatrix, noise_var=ctrl_pert_var)
+    controller_nom = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ep[-1],
+                                D=Dmatrix, noise_var=0.)
+    x_tmp, u_tmp = system.simulate(z_0, controller, t_eval)
+    u_nom_tmp = np.array([controller_nom.eval(x_tmp[ii,:], t_eval[ii]) for ii in range(x_tmp.shape[0]-1)])
     x_th_tmp, u_th_tmp = controller.get_thoughts_traj()
     x_th.append(x_th_tmp) # x_th[Nep][Nt][Ne] [Ns,Np]_NumpyArray
     u_th.append(u_th_tmp)  # u_th [Nep][Nt] [Nu,Np]_NumpyArray
     x_ep.append(x_tmp) # x_ep [Nep][Nt+1] [Ns,]_NumpyArray
     xd_ep.append(np.transpose(ref).tolist())
     u_ep.append(u_tmp) # u_ep [Nep][Nt] [Nu,]_NumpyArray
+    u_nom_ep.append(u_nom_tmp)  # u_ep [Nep][Nt] [Nu,]_NumpyArray
     t_ep.append(t_eval.tolist()) # t_ep [Nep][Nt+1,]_NumpyArray
     mpc_cost_ep.append(np.sum(np.diag((x_tmp[:-1,:].T-ref[:,:-1]).T@Q@(x_tmp[:-1,:].T-ref[:,:-1]) + u_tmp@R@u_tmp.T)))
 
     # Design robust MPC with current ensemble of Bs and execute experiment with KEEDMD model:
     if ep > 0:
         lifted_dyn = LinearSystemDynamics(A_keedmd, B_ep_keedmd[-1][:, :, 1])
-        controller_keedmd = RobustMpcDense(lifted_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ep_keedmd[-1], D=Dmatrix, edmd_object=keedmd_model, gather_thoughts=False)
-        #z_0_keedmd = keedmd_model.lift(z_0.reshape(z_0.shape[0],1), np.array([[set_pt],[0.]])).squeeze()
+        controller_keedmd = RobustMpcDense(lifted_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref, ensemble=B_ep_keedmd[-1], D=Dmatrix, edmd_object=keedmd_model, gather_thoughts=False, noise_var=ctrl_pert_var)
+        controller_keedmd_nom = RobustMpcDense(lifted_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,
+                                           ensemble=B_ep_keedmd[-1], D=Dmatrix, edmd_object=keedmd_model,
+                                           gather_thoughts=False, noise_var=0.)
         x_keedmd_tmp, u_keedmd_tmp = system.simulate(z_0, controller_keedmd, t_eval)
-        #x_keedmd_tmp = np.dot(keedmd_model.C, z_keedmd_tmp)
+        u_nom_keedmd_tmp = np.array([controller_keedmd_nom.eval(x_keedmd_tmp[ii,:], t_eval[ii]) for ii in range(x_keedmd_tmp.shape[0]-1)])
         x_ep_keedmd.append(x_keedmd_tmp)  # x_ep [Nep][Nt+1] [Ns,]_NumpyArray
         xd_ep_keedmd.append(np.transpose(ref).tolist())
         u_ep_keedmd.append(u_keedmd_tmp)  # u_ep [Nep][Nt] [Nu,]_NumpyArray
+        u_nom_ep_keedmd.append(u_nom_keedmd_tmp)
         t_ep_keedmd.append(t_eval.tolist())  # t_ep [Nep][Nt+1,]_NumpyArray
         mpc_cost_ep_keedmd.append(
             np.sum(np.diag((x_keedmd_tmp[:-1, :].T - ref[:, :-1]).T @ Q @ (x_keedmd_tmp[:-1, :].T - ref[:, :-1]) + u_keedmd_tmp @ R @ u_keedmd_tmp.T)))
     else:
-        x_keedmd_tmp, u_keedmd_tmp = x_tmp, u_tmp
+        x_keedmd_tmp, u_keedmd_tmp, u_nom_keedmd_tmp = x_tmp, u_tmp, u_nom_tmp
         x_ep_keedmd.append(x_keedmd_tmp)  # x_ep [Nep][Nt+1] [Ns,]_NumpyArray
         xd_ep_keedmd.append(np.transpose(ref).tolist())
         u_ep_keedmd.append(u_keedmd_tmp)  # u_ep [Nep][Nt] [Nu,]_NumpyArray
+        u_nom_ep_keedmd.append(u_nom_keedmd_tmp)  # u_ep [Nep][Nt] [Nu,]_NumpyArray
         t_ep_keedmd.append(t_eval.tolist())  # t_ep [Nep][Nt+1,]_NumpyArray
         mpc_cost_ep_keedmd.append(
             np.sum(np.diag((x_keedmd_tmp[:-1, :].T - ref[:, :-1]).T @ Q @ (
@@ -207,8 +216,8 @@ for ep in range(N_ep):
     if ep == N_ep-1:
         if tune_keedmd:
             print('Tuning KEEDMD regularization...')
-            x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, t_arr_keedmd = np.array(x_ep_keedmd), np.array(
-                xd_ep_keedmd), np.array(u_ep_keedmd), np.array(t_ep_keedmd)
+            x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, u_nom_arr_keedmd, t_arr_keedmd = np.array(x_ep_keedmd), np.array(
+                xd_ep_keedmd), np.array(u_ep_keedmd), np.array(u_nom_ep_keedmd), np.array(t_ep_keedmd)
             eigenfunction_basis.fit_diffeomorphism_model(X=x_arr_keedmd, t=t_arr_keedmd, X_d=xd_arr_keedmd,
                                                          l2=l2_diffeomorphism,
                                                          learning_rate=diff_learn_rate,
@@ -219,7 +228,7 @@ for ep in range(N_ep):
             keedmd_model = Keedmd(eigenfunction_basis, Ns, Nu, l1_pos=l1_pos_keedmd, l1_ratio_pos=l1_pos_ratio_keedmd,
                                   l1_vel=l1_vel_keedmd, l1_ratio_vel=l1_vel_ratio_keedmd, l1_eig=l1_eig_keedmd,
                                   l1_ratio_eig=l1_eig_ratio_keedmd, K_p=K_p, K_d=K_d, add_state=True)
-            X, X_d, Z, Z_dot, U, U_nom, t = keedmd_model.process(x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, u_arr_keedmd,
+            X, X_d, Z, Z_dot, U, U_nom, t = keedmd_model.process(x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, u_nom_arr_keedmd,
                                                                  t_arr_keedmd)
             keedmd_model.tune_fit(X, X_d, Z, Z_dot, U, U_nom)
         break
@@ -233,7 +242,7 @@ for ep in range(N_ep):
 
     # Update the ensemble of Bs with inverse Kalman filter of lifted model:
     print('- Updating A-matrix, lifted model')
-    x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, t_arr_keedmd = np.array(x_ep_keedmd), np.array(xd_ep_keedmd), np.array(u_ep_keedmd), np.array(t_ep_keedmd)
+    x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, u_nom_arr_keedmd, t_arr_keedmd = np.array(x_ep_keedmd), np.array(xd_ep_keedmd), np.array(u_ep_keedmd), np.array(u_nom_ep_keedmd), np.array(t_ep_keedmd)
     eigenfunction_basis.fit_diffeomorphism_model(X=x_arr_keedmd, t=t_arr_keedmd, X_d=xd_arr_keedmd, l2=l2_diffeomorphism,
                                                  learning_rate=diff_learn_rate,
                                                  learning_decay=diff_learn_rate_decay, n_epochs=diff_n_epochs,
@@ -242,9 +251,8 @@ for ep in range(N_ep):
     keedmd_model = Keedmd(eigenfunction_basis, Ns, Nu, l1_pos=l1_pos_keedmd, l1_ratio_pos=l1_pos_ratio_keedmd,
                           l1_vel=l1_vel_keedmd, l1_ratio_vel=l1_vel_ratio_keedmd, l1_eig=l1_eig_keedmd,
                           l1_ratio_eig=l1_eig_ratio_keedmd, K_p=K_p, K_d=K_d, add_state=True)
-    X, X_d, Z, Z_dot, U, U_nom, t = keedmd_model.process(x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, u_arr_keedmd, t_arr_keedmd)
+    X, X_d, Z, Z_dot, U, U_nom, t = keedmd_model.process(x_arr_keedmd, xd_arr_keedmd, u_arr_keedmd, u_nom_arr_keedmd, t_arr_keedmd)
     keedmd_model.fit(X, X_d, Z, Z_dot, U, U_nom)
-    # TODO: Add exploration noise and train KEEDMD based on that noise (now the control effect on the eigenfuncs are trained based on zero control input)
 
     print('- Updating ensemble, lifted model')
     A_keedmd = keedmd_model.A
