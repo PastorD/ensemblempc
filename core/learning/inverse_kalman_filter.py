@@ -34,7 +34,7 @@ class InverseKalmanFilter(Learner):
         G = lambda theta,y: 0
 
         self.eki = EKI(B_ensemble_flat, G, eta_0, 
-              true_theta=TrueB.flatten(), maxiter=2, max_error= 1e-6)
+              true_theta=TrueB.flatten(), maxiter=4, max_error= 1e-6)
         self.Bshape = TrueB.shape
         self.dt = dt
         self.nk = nk    

@@ -50,14 +50,14 @@ B_mean = np.array([[0.],[1]])
 Ns = B_mean.shape[0]
 E_mean = np.random.normal(Ns)
 Nu = B_mean.shape[1]
-sigmaB_traj = np.diag([0,0.2])
+sigmaB_traj = np.diag([0,0.4])
 sigmaB_timestep = np.array([0.,0.])
 sigmaE_traj = np.diag([0.0,0.])
 sigmaE_timestep = np.diag([0.0,0.0])
 
 
 dt = 0.01
-Ntraj = 30
+Ntraj = 5
 X, U, B = [],[], []
 for i in range(Ntraj):
     B_traj = B_mean + sigmaB_traj @ np.random.randn(Ns,Nu)
@@ -72,7 +72,7 @@ for i in range(Ntraj):
 
 print(len(X))
 eta_0 = 0.1
-Nen = 10
+Nen = 4
 bspread = 0.6
 B_0 = np.zeros((Ns,Nu,Nen))
 for i in range(Nen):

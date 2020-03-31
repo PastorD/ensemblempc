@@ -172,9 +172,9 @@ class EKI():
             Cuu = u_d @ u_d.T
             Cug =    u_d @ Gxe_d.T
             Cgg =  Gxe_d @ Gxe_d.T
-            K = Cug @ np.linalg.inv(Cgg + R) 
+            K = Cug @ np.linalg.inv(Cgg + R*j) 
             
-            debug = False
+            debug = True
             if debug:
                 plt.figure()
                 plt.subplot(2,1,1,xlabel="Ns*(N+1)", ylabel="Ns*(N+1)")

@@ -104,8 +104,8 @@ for ep in range(N_ep):
     # Update the ensemble of Bs with inverse Kalman filter:
     #x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
     #                                                                           np.array(u_ep), np.array(t_ep))
-    if (ep > 2):
-        inverse_kalman_filter.fit(x_ep, u_ep) 
+    #if (ep > 2):
+    inverse_kalman_filter.fit(x_ep, u_ep) 
     B_ep.append(inverse_kalman_filter.B_ensemble)
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.array(u_ep), np.array(traj_ep), \
