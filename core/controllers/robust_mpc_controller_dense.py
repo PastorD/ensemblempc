@@ -33,7 +33,8 @@ class RobustMpcDense(Controller):
                 name="noname", 
                 D=None,
                 ensemble=None,
-                gather_thoughts=False):
+                gather_thoughts=False,
+                noise_var=0.):
         """__init__ [summary]
         
         osqp state: 
@@ -117,6 +118,9 @@ class RobustMpcDense(Controller):
         if self.gather_thoughts: 
             self.xe_th = []
             self.u_th = []
+
+        # Controller perturbation:
+        self.control_pert_noise = noise_var
                
 
         # Check Xmin and Xmax
@@ -364,7 +368,7 @@ class RobustMpcDense(Controller):
             self.xe_th.append(self.get_ensemble_state_prediction())
             self.u_th.append(self.get_control_prediction())
 
-        return  self.uoutput
+        return self.uoutput + np.random.normal(0.,np.sqrt(self.control_pert_noise),(nu,))
 
     def get_state_prediction(self):
         u_flat = self._osqp_result.x[:self.nu*self.N]

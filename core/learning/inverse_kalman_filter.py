@@ -100,7 +100,7 @@ class InverseKalmanFilter(Learner):
         """
         Ntraj = len(X)
         
-        debug = True
+        debug = False
         if debug:
             plt.figure()
             plt.subplot(2,1,1,xlabel="time", ylabel="X")

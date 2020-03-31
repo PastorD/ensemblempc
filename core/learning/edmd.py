@@ -127,7 +127,7 @@ class Edmd():
 
         Ntraj = X.shape[0]  # Number of trajectories in dataset
         order = 'F'
-        Z = array([self.lift(X[ii,:,:].transpose(), X[ii,:,:].transpose()) for ii in range(Ntraj)])  # Lift x
+        Z = array([self.lift(X[ii,:,:].transpose(), X_d[ii,:,:].transpose()) for ii in range(Ntraj)])  # Lift x
 
         # Vectorize Z- data
         n_data = Z.shape[0] * Z.shape[1]
