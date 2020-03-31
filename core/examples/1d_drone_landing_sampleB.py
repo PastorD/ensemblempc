@@ -99,7 +99,7 @@ for j in range(N_sampling):
 
     
 #! Plot results
-f21 = plt.figure(figsize=(14,9))
+f21 = plt.figure(figsize=(12,6))
 gs2 = gridspec.GridSpec(2,2, figure=f21)
 # plt.subplot(2,2,1)
 # plt.hist(B_hist)
@@ -107,7 +107,7 @@ gs2 = gridspec.GridSpec(2,2, figure=f21)
 import matplotlib
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
-matplotlib.tight_layout()
+plt.tight_layout()
 # plt.grid()
 colors = pl.cm.cool([(B[0]-min(B_hist)[0])/(max(B_hist)[0] - min(B_hist)[0]) for B in B_hist])
 
