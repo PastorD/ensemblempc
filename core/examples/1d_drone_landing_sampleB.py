@@ -33,10 +33,10 @@ Nu = B_mean.shape[1]
 
 # Define simulation parameters:
 z_0 = np.array([4., 0.])                                    # Initial position
-dt = 1e-2                                                   # Time step length
-t_max = 2.5                                                  # End time (sec)
+dt = 4e-2                                                   # Time step length
+t_max = 1.5                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 6                                                   # Number of episodes
+
 
 # Model predictive controller parameters:
 Q = np.array([[1e4, 0.], [0., 1.]])
@@ -65,45 +65,52 @@ B_ensemble = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[
 
 
 #B_ensemble_list = [B_mean-np.array([[0.],[0.5]]), B_mean, B_mean+np.array([[0.],[0.5]])]
-true_sys = LinearSystemDynamics(A, B_mean)
-print(f"Main parameters: Nb:{Nb}, N_ep:{N_ep}, N_t:{N_steps}")
+mean_sys = LinearSystemDynamics(A, B_mean)
 
 print(f"Run Testing Ensemble Experiment")
-N_sampling = 3
+N_sampling = 100
+print(f"Main parameters: Nb:{Nb}, N_sampling:{N_sampling}, N_t:{N_steps}")
 x_raw, x_ensemble = [], []
 x_th, u_th  = [], []
+impacts_ensemble, impacts_raw = [], []
 B_hist = []
-sigmaB = sigmaB = np.diag([0,0.2])
+sigmaB = 0.2
 for j in range(N_sampling):
 
     # Design robust MPC with current ensemble of Bs and execute experiment:
-    B_sample = B_mean + sigmaB @ np.random.randn(Ns,Nu)
-    B_hist.append(B_sample[1,0])
-    print(f"Test {j}: B:{B_sample[1,0]}")
-    lin_dyn = LinearSystemDynamics(A, B_sample)
-    
-    controller_ensemble = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)          
+    #B_sample = B_mean + sigmaB @ np.random.randn(Ns,Nu)
+    #B_hist.append(B_sample[1,0])
+
+    mass_sample = 1/(1/mass+sigmaB*np.random.randn()) # perturb B_2=1/mass
+    print(f"Test {j}: B:{mass_sample}")
+
+    B_hist.append( [1/mass_sample] )
+    system = LinearOneDimDrone(mass_sample, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
+
+    controller_ensemble = RobustMpcDense(mean_sys, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=B_ensemble, D=Dmatrix)          
     x_tmp, u_tmp = system.simulate(z_0, controller_ensemble, t_eval) 
     x_ensemble.append(x_tmp.T) # x_raw [N_sampling][Ns,Nt]_NumpyArray
-    #for x in x_tmp:
-    #    if ( abs(x[])
+    impacts_ensemble.append(system.impacts)
     
-    controller_raw = RobustMpcDense(lin_dyn, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=None, D=Dmatrix)          
+    controller_raw = RobustMpcDense(mean_sys, N_steps, dt, umin, umax, xmin, xmax, Q, R, QN, ref,ensemble=None, D=Dmatrix)          
     x_tmp, u_tmp = system.simulate(z_0, controller_raw, t_eval) 
-    x_raw.append(x_tmp) # x_ensemble [N_sampling][Nt][Ns,]_NumpyArray
+    x_raw.append(x_tmp.T) # x_ensemble [N_sampling][Nt][Ns,]_NumpyArray
+    impacts_raw.append(system.impacts)
 
     
 #! Plot results
 f21 = plt.figure(figsize=(18,9))
-gs2 = gridspec.GridSpec(3,2, figure=f21)
-plt.subplot(3,1,1)
-plt.hist(B_hist)
-plt.xlabel("B(2,1)")
-plt.grid()
-colors = pl.cm.cool((B_hist-min(B_hist))/(max(B_hist) - min(B_hist)))
+gs2 = gridspec.GridSpec(2,2, figure=f21)
+# plt.subplot(2,2,1)
+# plt.hist(B_hist)
+# plt.xlabel("B(2,1)")
+# plt.grid()
+colors = pl.cm.cool([(B[0]-min(B_hist)[0])/(max(B_hist)[0] - min(B_hist)[0]) for B in B_hist])
 
-plt.subplot(3,2,3)
-[plt.plot(t_eval,x[:,0],color=colorB) for x,colorB in zip(x_raw,colors)]
+plt.subplot(2,2,1)
+for x,impacts,colorB in zip(x_raw,impacts_raw,colors):
+    plt.plot(t_eval,x[0,:],color=colorB) 
+    [plt.scatter(impact[0],ground_altitude,color='b',s=40) for impact in impacts]
 plt.plot( [1,t_max], [xmin[0],xmin[0]], '--r', lw=2, label='Ground')
 plt.plot( [1,t_max], [ref[0,0],ref[0,0]], '--r', lw=1, label='Reference')
 plt.xlabel("Time(s)")
@@ -114,8 +121,10 @@ plt.xlim(1,t_max)
 plt.legend()
 plt.grid()
 
-plt.subplot(3,2,5)
-[plt.plot(t_eval,x[:,1],color=colorB) for x,colorB in zip(x_raw,colors)]
+plt.subplot(2,2,3)
+for x,impacts,colorB in zip(x_raw,impacts_raw,colors):
+    plt.plot(t_eval,x[1,:],color=colorB) 
+    #[plt.scatter(impact[0],0,color='b',s=40) for impact in impacts]
 plt.plot( [1,t_max], [0,0], '--r', lw=2, label='Zero Speed')
 plt.xlabel("Time(s)")
 plt.ylabel("Velocity(m/s)")
@@ -124,8 +133,10 @@ plt.xlim(1,t_max)
 plt.grid()
 
 
-plt.subplot(3,2,4)
-[plt.plot(t_eval,x[:,0],color=colorB) for x,colorB in zip(x_ensemble,colors)]
+plt.subplot(2,2,2)
+for x,impacts,colorB in zip(x_ensemble,impacts_ensemble,colors):
+    plt.plot(t_eval,x[0,:],color=colorB) 
+    [plt.scatter(impact[0],ground_altitude,color='b',s=40) for impact in impacts]
 plt.plot( [1,t_max], [xmin[0],xmin[0]], '--r', lw=2, label='Ground')
 plt.plot( [1,t_max], [ref[0,0],ref[0,0]], '--r', lw=1, label='Reference')
 plt.xlabel("Time(s)")
@@ -136,8 +147,10 @@ plt.xlim(1,t_max)
 plt.legend()
 plt.grid()
 
-plt.subplot(3,2,6)
-[plt.plot(t_eval,x[:,1],color=colorB) for x,colorB in zip(x_ensemble,colors)]
+plt.subplot(2,2,4)
+for x,impacts,colorB in zip(x_ensemble,impacts_ensemble,colors):
+    plt.plot(t_eval,x[1,:],color=colorB) 
+    #[plt.scatter(impact[0],0,color='b',s=40) for impact in impacts]
 plt.plot( [1,t_max], [0,0], '--r', lw=2, label='Zero Speed')
 plt.xlabel("Time(s)")
 plt.ylabel("Velocity(m/s)")
@@ -145,9 +158,9 @@ plt.ylim(-3.,2.)
 plt.xlim(1,t_max)
 plt.grid()
 
+#plt.show()
 
-f21.savefig('core/examples/results/test_B_both.pdf', format='pdf', dpi=2400)
-plt.show()
+f21.savefig('core/examples/results/test_B_both_noB.pdf', format='pdf', dpi=2400)
 
 sp.io.savemat('./core/examples/1d_drone_Btesting.mat', {'x_ensemble': x_ensemble, 
                                                     'xmin':xmin, 
