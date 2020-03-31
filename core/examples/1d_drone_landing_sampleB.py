@@ -33,7 +33,7 @@ Nu = B_mean.shape[1]
 
 # Define simulation parameters:
 z_0 = np.array([4., 0.])                                    # Initial position
-dt = 4e-2                                                   # Time step length
+dt = 1e-2                                                   # Time step length
 t_max = 1.5                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
 
