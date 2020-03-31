@@ -34,7 +34,7 @@ class InverseKalmanFilter(Learner):
         G = lambda theta,y: 0
 
         self.eki = EKI(B_ensemble_flat, G, eta_0, 
-              true_theta=TrueB.flatten(), maxiter=5, max_error= 1e-6)
+              true_theta=TrueB.flatten(), maxiter=2, max_error= 1e-6)
         self.Bshape = TrueB.shape
         self.dt = dt
         self.nk = nk    
@@ -88,33 +88,38 @@ class InverseKalmanFilter(Learner):
             print(f"ctrl")
         
 
-    def fit(self, X, X_dot, U):
+    def fit(self, X, U):
         """
         Fit a learner
 
         Inputs:
-        - X: state with all trajectories, numpy 3d array [NtrajxN, ns]
+        - X: state with all trajectories, list [Ntraj] numpy array [ns,Nt]
         - X_dot: time derivative of the state
         - U: control input, numpy 3d array [NtrajxN, nu]
         - t: time, numpy 2d array [Ntraj, N]
         """
-
-        debug = False
+        Ntraj = len(X)
+        
+        debug = True
         if debug:
             plt.figure()
             plt.subplot(2,1,1,xlabel="time", ylabel="X")
-            for i in range(self.Ns):
-                plt.plot(X[i,:], linewidth=1,label=f'state {i}') 
+            for Xtraj in X:
+                for i in range(self.Ns):
+                    plt.plot(Xtraj[i,:], linewidth=1,label=f'state {i}') 
             plt.grid()
             plt.title("State")
             plt.legend()
             plt.subplot(2,1,2,xlabel="U", ylabel=f"U")
-            for i in range(self.Nu):
-                plt.plot(U[i,:], linewidth=1,label=f'Input {i}') 
+            for Utraj in U:
+                for i in range(self.Nu):
+                    plt.plot(Utraj[i,:], linewidth=1,label=f'Input {i}') 
             plt.grid()
             plt.title("Input")
             plt.legend()
             plt.show()
+            plt.savefig(f"fit_debug_states.pdf", format='pdf', dpi=1200,bbox_inches='tight')
+
 
 
 
@@ -128,7 +133,14 @@ class InverseKalmanFilter(Learner):
                 self.new_ensamble[:,:,i] = B_mean + shrink_rate*(self.B_ensemble[:,:,i]-B_mean)
         else:
 
-            Ym = X[:,self.nk:]#-X[:,:-self.nk]
+            Nt = X[0].shape[1] # number of 
+            Ntk = Nt - self.nk # number of columns per trajectory 
+            Ng = Ntk*Ntraj # number of columns of G
+            Ngs = Ng*self.Ns # total size of G flatten
+            Ym = np.empty((Ntraj,self.Ns,Ntk))
+            for i_traj, Xtraj in enumerate(X):
+                Ydiff = Xtraj[:,self.nk:] - Xtraj[:,:-self.nk]
+                Ym[i_traj,:,:] = Ydiff
             Ym_flat = Ym.flatten()
             self.eki.G = lambda Bflat: self.Gdynamics(Bflat,X,U)
             self.B_ensemble_flat =  self.B_ensemble.reshape(-1, self.B_ensemble.shape[-1]) # [NsNu,Ne]
@@ -140,23 +152,43 @@ class InverseKalmanFilter(Learner):
         self.B_ensemble = self.new_ensamble.copy()
 
     def Gdynamics(self,Bflat, X, U):
-    
-        Ny = X.shape[1]
-        Ng = Ny - self.nk
-        G = np.zeros((self.Ns,Ng))
+        """
+        Create G in EKI y = G(theta)
+        
+        Ng: number of measurements
+        
+        Arguments:
+            Bflat {numpy array [Ns Nu]} -- flat dynamical parameters
+            X {numpy array [Ntraj][Ns,Nt]} -- data
+            U {numpy array [Ntraj[Nu,Nt]]} -- input
+        
+        Returns:
+            numpy array [Ng,] -- G(theta)
+        """
+        Ntraj = len(X)
+        Nt = X[0].shape[1] # number of 
+        Ntk = Nt - self.nk # number of columns per trajectory 
+        Ng = Ntk*Ntraj # number of columns of G
+        Ngs = Ng*self.Ns # total size of G flatten
+        G = np.empty((Ntraj,self.Ns,Ntk))
 
         B = Bflat.reshape(self.Bshape)
-        self.get_multistep_matrices(B)
-        for i in range(Ng):
-            xc = X[:,i]
-            for ii in range(self.nk):
-                ctrl = U[:,i+ii]
-                xc = solve_ivp(lambda t,x: self.A @ x + B @ ctrl + self.E, [0, self.dt], xc, atol=1e-6, rtol=1e-6).y[:, -1] 
-            #ctrl = U[:,i:i+self.nk]
-            #f_x_dot = lambda t,x: self.A @ x + B @ ctrl[int(t/dt)]
-            #Xplus = solve_ivp(f_x_dot, [0, dt*nk], X[:,j], atol=1e-6, rtol=1e-6).y[:, -1] 
-            G[:,i] = xc
-            #G[:,i] = self.An @ X[:,i] + self.ABM @ U[:,i:i+self.nk].flatten()#-X[:,i]
+        #self.get_multistep_matrices(B)
+        
+        for i_traj, (Xtraj, Utraj) in enumerate(zip(X,U)):
+            for i in range(Ntk):
+                xc = Xtraj[:,i] # init of nk steps
+                for multistep_index in range(self.nk):
+                    ctrl = Utraj[:,i+multistep_index]
+                    xc = solve_ivp(lambda t,x: self.A @ x + B @ ctrl + self.E, [0, self.dt], xc, atol=1e-6, rtol=1e-6).y[:, -1] 
+                Gi = xc-Xtraj[:,i]
+                G[i_traj,:,i] = Gi
+
+                #ctrl = U[:,i:i+self.nk]
+                #f_x_dot = lambda t,x: self.A @ x + B @ ctrl[int(t/dt)]
+                #Xplus = solve_ivp(f_x_dot, [0, dt*nk], X[:,j], atol=1e-6, rtol=1e-6).y[:, -1] 
+                #G[:,i] = xc-X[:,i]
+                #G[:,i] = self.An @ X[:,i] + self.ABM @ U[:,i:i+self.nk].flatten()#-X[:,i]
         return G.flatten()
         
 

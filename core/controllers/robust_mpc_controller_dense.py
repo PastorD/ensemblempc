@@ -33,7 +33,7 @@ class RobustMpcDense(Controller):
                 name="noname", 
                 D=None,
                 ensemble=None,
-                gather_thoughts=True):
+                gather_thoughts=False):
         """__init__ [summary]
         
         osqp state: 
@@ -390,7 +390,12 @@ class RobustMpcDense(Controller):
         return  np.transpose(np.reshape( self.a @ x + self.B @ u, (self.N,self.nx)))
 
     def get_thoughts_traj(self):
-        return self.xe_th, self.u_th
+        xe_th = self.xe_th
+        u_th = self.u_th
+        self.xe_th = []
+        self.u_th = []
+        return xe_th, u_th
+
 
     def get_control_prediction(self):
         """get_control_prediction parse control command from MPC optimization
@@ -398,7 +403,7 @@ class RobustMpcDense(Controller):
         Returns:
             numpy array [N,Nu] -- control command along MPC optimization
         """
-        return np.transpose(np.reshape( self._osqp_result.x[-self.N*self.nu:], (self.N,self.nu)))
+        return np.reshape( self._osqp_result.x[0:self.N*self.nu], (self.nu,self.N))
 
     def plot_MPC(self, current_time, x0, xr, tindex):
         """plot_MPC Plot MPC thoughts
