@@ -22,8 +22,8 @@ area = 0.04                                                 # Drone surface area
 gravity = 9.81                                              # Gravity (m/s^2)
 T_hover = mass*gravity                                      # Hover thrust (N)
 ground_altitude = 0.2                                       # Altitude corresponding to drone landed (m)
-#system = OneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
-system = LinearOneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
+system = OneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
+#system = LinearOneDimDrone(mass, rotor_rad, drag_coeff, air_dens, area, gravity, ground_altitude, T_hover)
 
 # Define initial linearized model and ensemble of Bs (linearized around hover):
 A = np.array([[0., 1.], [0., 0.]])
@@ -34,21 +34,21 @@ Nu = B_mean.shape[1]
 # Define simulation parameters:
 z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
-t_max = 2.5                                                 # End time (sec)
+t_max = 2.0                                                 # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
 N_ep = 10                                                    # Number of episodes
 
 # Model predictive controller parameters:
-Q = np.array([[4e3, 0.], [0., 1.]])
+Q = np.array([[8e3, 0.], [0., 1.]])
 QN = Q
 R = np.array([[1e1]])
-Dmatrix = sp.sparse.diags([1e5,1000])
+Dmatrix = sp.sparse.diags([1e6,1000])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
 umax = np.array([30.-T_hover])
 xmin=np.array([ground_altitude, -5.])
 xmax=np.array([10., 5.])
-ref = np.array([[ground_altitude+0.03 for _ in range(N_steps+1)],
+ref = np.array([[ground_altitude+0.05 for _ in range(N_steps+1)],
                 [0. for _ in range(N_steps+1)]])
 
 #! Filter Parameters:
@@ -104,8 +104,8 @@ for ep in range(N_ep):
     # Update the ensemble of Bs with inverse Kalman filter:
     #x_flat, xd_flat, xdot_flat, u_flat, t_flat = inverse_kalman_filter.process(np.array(x_ep), np.array(xd_ep),
     #                                                                           np.array(u_ep), np.array(t_ep))
-    if (ep > 2):
-        inverse_kalman_filter.fit(x_ep, u_ep) 
+    #if (ep > 2):
+    inverse_kalman_filter.fit(x_ep, u_ep) 
     B_ep.append(inverse_kalman_filter.B_ensemble)
 
 x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.array(u_ep), np.array(traj_ep), \
@@ -117,7 +117,7 @@ x_ep, xd_ep, u_ep, traj_ep, B_ep, t_ep = np.array(x_ep), np.array(xd_ep), np.arr
 # Plot evolution of ensembles of B and predicted trajectories for each episode:
 
 def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, ground_altitude,T_hover):
-    f2 = plt.figure(figsize=(24,9))
+    f2 = plt.figure(figsize=(15,12))
     gs2 = gridspec.GridSpec(5,3, figure=f2)
     
     # - Plot evolution of B ensemble:
