@@ -15,7 +15,7 @@ print("Starting 1D Drone Landing Simulation...")
 # Define system parameters of the drone:
 mass = 1                                                    # Drone mass (kg)
 rotor_rad = 0.08                                            # Rotor radius (m)
-drag_coeff = 0.5                                            # Drag coefficient
+drag_coeff = 2                                            # Drag coefficient
 air_dens = 1.25                                             # Air density (kg/m^3)
 area = 0.04                                                 # Drone surface area in xy-plane (m^2)
 gravity = 9.81                                              # Gravity (m/s^2)
@@ -35,16 +35,16 @@ z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
 t_max = 2.5                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 10                                                   # Number of episodes
+N_ep = 2                                                   # Number of episodes
 
 # Model predictive controller parameters:
-Q = np.array([[1e4, 0.], [0., 1e1]])
+Q = np.array([[1e4, 0.], [0., 1]])
 QN = Q
-R = np.array([[1e1]])
-Dmatrix = sp.sparse.diags([50000,30000])
+R = np.array([[1]])
+Dmatrix = sp.sparse.diags([5e5,3e5])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
-umax = np.array([30.-T_hover])
+umax = np.array([20.-T_hover])
 xmin=np.array([ground_altitude, -5.])
 xmax=np.array([10., 5.])
 set_pt = ground_altitude+0.1
