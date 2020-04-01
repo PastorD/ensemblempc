@@ -50,14 +50,14 @@ B_mean = np.array([[0.],[1]])
 Ns = B_mean.shape[0]
 E_mean = np.random.normal(Ns)
 Nu = B_mean.shape[1]
-sigmaB_traj = np.diag([0,0.4])
+sigmaB_traj = np.diag([0.1,0.2])
 sigmaB_timestep = np.array([0.,0.])
 sigmaE_traj = np.diag([0.0,0.])
 sigmaE_timestep = np.diag([0.0,0.0])
 
 
 dt = 0.01
-Ntraj = 5
+Ntraj = 6
 X, U, B = [],[], []
 for i in range(Ntraj):
     B_traj = B_mean + sigmaB_traj @ np.random.randn(Ns,Nu)
@@ -72,19 +72,19 @@ for i in range(Ntraj):
 
 print(len(X))
 eta_0 = 0.1
-Nen = 4
+Nen = 6
 bspread = 0.6
 B_0 = np.zeros((Ns,Nu,Nen))
 for i in range(Nen):
     B_0[:,:,i] = B_mean+np.random.randn(Ns,Nu)*bspread
     #B_0 = [B_mean + np.random.randn(Ns,Nu)*bspread for i in range(Ne)]
     
-plt.hist([B[j][i][1,0] for i in range(99) for j in range(Ntraj)],bins=50)
+#plt.hist([B[j][i][1,0] for i in range(99) for j in range(Ntraj)],bins=50)
 #plt.show()
-eki = InverseKalmanFilter(A_mean,B_mean,E_mean,eta_0,B_0,dt=dt,nk=10)
-eki.fit(X, U=U)
-cov_B = eki.eki.cov_theta
-B_reco = np.mean(eki.B_ensemble_flat,axis=1)
+eks = InverseKalmanFilter(A_mean,B_mean,E_mean,eta_0,B_0,dt=dt,nk=10,maxiter=20)
+eks.fit(X, U=U)
+cov_B = eks.eks.cov_theta
+B_reco = np.mean(eks.B_ensemble_flat,axis=1)
 print(f"B:{B_mean[1]} vs recovered:{B_reco[1]}")
 print(f"sigma B_time:{sigmaB_timestep[1]}, sigma B_traj:{sigmaB_traj[1]}  vs recovered:{cov_B}")
 
