@@ -4,7 +4,7 @@ from scipy.linalg import expm
 from numpy import array, concatenate, zeros, dot, linalg, eye, ones, std, where, divide, multiply, tile, argwhere, diag, copy, ones_like
 from .basis_functions import BasisFunctions
 from .learner import Learner
-from .eki import EKI
+from .eki import EKS
 import numpy as np
 import scipy
 import scipy.signal as signal
@@ -23,7 +23,7 @@ class InverseKalmanFilter(Learner):
     '''
     Transforms a parametrized dynamics problem as a Inverse Kalman Inversion problem
     '''
-    def __init__(self, A, TrueB, E, eta_0, B_ensemble, dt, nk):
+    def __init__(self, A, TrueB, E, eta_0, B_ensemble, dt, nk, maxiter=15):
 
         self.A = A
         self.B_ensemble = B_ensemble
@@ -33,8 +33,8 @@ class InverseKalmanFilter(Learner):
         B_ensemble_flat = np.reshape(B_ensemble, (self.Nu*self.Ns,self.Ne))
         G = lambda theta,y: 0
 
-        self.eki = EKI(B_ensemble_flat, G, eta_0, 
-              true_theta=TrueB.flatten(), maxiter=2, max_error= 1e-6)
+        self.eks = EKS(B_ensemble_flat, G, eta_0, 
+              true_theta=TrueB.flatten(), maxiter=maxiter, max_error= 1e-6)
         self.Bshape = TrueB.shape
         self.dt = dt
         self.nk = nk    
@@ -100,7 +100,7 @@ class InverseKalmanFilter(Learner):
         """
         Ntraj = len(X)
         
-        debug = True
+        debug = False
         if debug:
             plt.figure()
             plt.subplot(2,1,1,xlabel="time", ylabel="X")
@@ -142,10 +142,10 @@ class InverseKalmanFilter(Learner):
                 Ydiff = Xtraj[:,self.nk:] - Xtraj[:,:-self.nk]
                 Ym[i_traj,:,:] = Ydiff
             Ym_flat = Ym.flatten()
-            self.eki.G = lambda Bflat: self.Gdynamics(Bflat,X,U)
+            self.eks.G = lambda Bflat: self.Gdynamics(Bflat,X,U)
             self.B_ensemble_flat =  self.B_ensemble.reshape(-1, self.B_ensemble.shape[-1]) # [NsNu,Ne]
             print(f"new {self.B_ensemble_flat}")
-            self.new_ensemble_flat = self.eki.solveIP(self.B_ensemble_flat, Ym_flat)
+            self.new_ensemble_flat = self.eks.solveIP(self.B_ensemble_flat, Ym_flat)
             print(f"new {self.B_ensemble_flat}")
             self.new_ensamble = self.new_ensemble_flat.reshape((self.Ns,self.Nu,self.Ne))
     
