@@ -68,15 +68,18 @@ class LinearOneDimDrone(RoboticDynamics):
         xs = zeros((N, self.n))
         us = [None] * (N - 1)
 
+        self.impacts = []
+
         controller.reset()
         xs[0] = x_0
         for j in range(N - 1):
             x = xs[j]
+            t = ts[j]
             if x[0] < self.ground_altitude:
                 x[0] = self.ground_altitude
                 x[1] = -x[1]
+                self.impacts.append([t,x[1]])
 
-            t = ts[j]
             u = controller.eval(x, t) + self.T_hover
             us[j] = u
             u = controller.process(u)

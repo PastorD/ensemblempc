@@ -5,11 +5,13 @@
     "version": "0.2.0",
     "configurations": [       
 
+
+
         {
             "name": "1d_drone",
             "type": "python",
             "request": "launch",
-            "module": "core.examples.1d_drone_landing"
+            "module": "core.examples.1d_drone_landing_sampleB"
         },
         {
             "name": "Linestplay",
@@ -18,10 +20,10 @@
             "module": "core.examples.linear_estimation_playground"
         },
         {
-            "name": "plotly 1d",
+            "name": "1d_drone_landing_sample_train_evaluate 1d",
             "type": "python",
             "request": "launch",
-            "module": "core.examples.1d_plotly"
+            "module": "core.examples.1d_drone_landing_sample_train_evaluate"
         }
     ]
 }

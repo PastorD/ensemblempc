@@ -34,7 +34,7 @@ Nu = B_mean.shape[1]
 # Define simulation parameters:
 z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
-t_max = 2.5                                                  # End time (sec)
+t_max = 2.0                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
 N_ep = 6                                                   # Number of episodes
 
@@ -80,21 +80,39 @@ z_mean = ctrl_tmp_mean.get_state_prediction()
 z_b = ctrl_tmp_mean.get_ensemble_state_prediction()
 
 t_z = np.linspace(0,ctrl_tmp_mean.N*dt,ctrl_tmp_mean.N)
-f,axarr=plt.subplots(3, sharex=True)
+
+f = plt.figure(figsize=(7.2,4.45))
+gs2 = gridspec.GridSpec(3,1, figure=f)
+#f,axarr=plt.subplots(3,sharex=True )
 f.subplots_adjust(hspace=.1)
 
+import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+
+# params = {
+#    'axes.labelsize': 10,
+#    'legend.fontsize': 8,
+#    'xtick.labelsize': 10,
+#    'ytick.labelsize': 10,
+#    'text.usetex': True,
+#    'figure.figsize': [7, 4] # instead of 4.5, 4.5
+#    }
+#matplotlib.rcParams.update(params)
+plt.tight_layout()
+
 plt.subplot(3,1,1,ylabel='Position')
-plt.plot(t_z, z_mean[0,:], linewidth=3, label=f'B Mean {B_mean}')
+plt.plot(t_z, z_mean[0,:], linewidth=3, label=f'$\\bar{{B}}_2$ {B_mean[1,0]}')
 for i in range(Nb):
-    plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
+    plt.plot(t_z, z_b[i][0,:], linewidth=1, label=f'$B_2$ {B_ensemble[1,0,i]}')
 plt.plot(t_z, ground_altitude*np.ones(t_z.shape), linestyle="--", linewidth=1, label=f'Minimum z', color='gray')
 plt.legend(loc='upper right')
 plt.grid()
 
 plt.subplot(3,1,2, ylabel='Velocity')
-plt.plot(t_z, z_mean[1,:], linewidth=3, label=f'B Mean {B_mean}')
+plt.plot(t_z, z_mean[1,:], linewidth=3, label=f'$\\bar{{B}}_2$ {B_mean[1,0]}')
 for i in range(Nb):
-    plt.plot(t_z, z_b[i][1,:], linewidth=1, label=f'B {B_ensemble[:,:,i]}')
+    plt.plot(t_z, z_b[i][1,:], linewidth=1, label=f'$B_2$ {B_ensemble[1,0,i]}')
 plt.plot(t_z, xmin[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
 plt.plot(t_z, xmax[1]*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
 plt.legend(loc='upper right')
@@ -106,5 +124,7 @@ plt.plot(t_z, umin*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray'
 plt.plot(t_z, umax*np.ones(t_z.shape), linestyle="--", linewidth=1, color='gray')
 plt.legend(loc='upper right')
 plt.grid()
+
+
+f.savefig('core/examples/results/hard_mpc_2.pdf', format='pdf', dpi=1200)
 plt.show()
-f.savefig('core/examples/results/hard_mpc.pdf', format='pdf', dpi=2400)
