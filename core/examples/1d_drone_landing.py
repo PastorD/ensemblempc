@@ -7,6 +7,7 @@ from matplotlib.ticker import MaxNLocator
 from matplotlib import gridspec
 import matplotlib.pylab as pl
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 import scipy as sp
 
@@ -36,12 +37,12 @@ z_0 = np.array([4., 0.])  # Initial position
 dt = 1e-2  # Time step length
 t_max = 1.5  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max / dt))  # Simulation time points
-N_ep = 3  # Number of episodes
+N_ep = 6  # Number of episodes
 
 # Model predictive controller parameters:
-Q = np.array([[8e3, 0.], [0., 1.]])
+Q = np.array([[2e4, 0.], [0., 1.]])
 QN = Q
-R = np.array([[1e1]])
+R = np.array([[1]])
 Dmatrix = sp.sparse.diags([1e6,1000])
 N_steps = int(t_max/dt)-1
 umin = np.array([-T_hover])
@@ -220,6 +221,8 @@ def plot_summary_EnMPC(B_ep, N_ep, mpc_cost_ep, t_eval, x_ep, u_ep, x_th, u_th, 
         u_plot[ii].grid()
     pos_plot[-1].legend(loc='lower right')
     u_plot[-1].legend(loc='upper right')
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['ps.fonttype'] = 42
 
     gs2.tight_layout(f2)
     f2.savefig('core/examples/results/executed_traj.pdf', format='pdf', dpi=2400)

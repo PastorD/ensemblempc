@@ -33,9 +33,9 @@ Nu = B_mean.shape[1]
 # Define simulation parameters:
 z_0 = np.array([4., 0.])                                    # Initial position
 dt = 1e-2                                                   # Time step length
-t_max = 2.5                                                  # End time (sec)
+t_max = 2.0                                                  # End time (sec)
 t_eval = np.linspace(0, t_max, int(t_max/dt))               # Simulation time points
-N_ep = 2                                                   # Number of episodes
+N_ep = 6                                                   # Number of episodes
 
 # Model predictive controller parameters:
 Q = np.array([[1e4, 0.], [0., 1]])
@@ -73,9 +73,9 @@ E_edmd = np.array([0,-gravity*mass])
 E_edmd = np.concatenate((E_edmd, np.zeros(n_lift)))
 B_mean_edmd = np.concatenate((B_mean, np.zeros((n_lift, Nu))))
 B_ensemble_edmd = np.stack([B_mean-np.array([[0.],[0.6]]), B_mean, B_mean+np.array([[0.],[0.6]])],axis=2)
-B_ensemble_edmd = np.stack([np.concatenate((B_ensemble_edmd[:,:,0], -0.1*np.ones((n_lift,Nu)))),
+B_ensemble_edmd = np.stack([np.concatenate((B_ensemble_edmd[:,:,0], -0.2*np.ones((n_lift,Nu)))),
                                 B_mean_edmd,
-                                np.concatenate((B_ensemble_edmd[:,:,2], 0.1*np.ones((n_lift,Nu))))], axis=2)
+                                np.concatenate((B_ensemble_edmd[:,:,2], 0.2*np.ones((n_lift,Nu))))], axis=2)
 A_edmd = np.zeros((n_lift+Ns, n_lift+Ns))
 A_edmd[:Ns,:Ns] = A
 C_edmd = np.zeros((Ns, n_lift+Ns))
