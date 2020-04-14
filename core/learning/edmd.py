@@ -9,7 +9,7 @@ class Edmd():
     Base class for edmd-type methods. Implements baseline edmd with the possible addition of l1 and/or l2 regularization.
     Overload fit for more specific methods.
     '''
-    def __init__(self, basis=BasisFunctions(0,0), system_dim=0, l1=0., l1_ratio=0.5, acceleration_bounds=None, override_C=True, add_ones=True, add_state=True):
+    def __init__(self, basis=BasisFunctions(0,0), system_dim=0, control_dim=0, l1=0., l1_ratio=0.5, acceleration_bounds=None, override_C=True, add_ones=True, add_state=True):
         self.A = None
         self.B = None
         self.C = None
@@ -17,19 +17,18 @@ class Edmd():
         self.l1 = l1  # Strength of l1 regularization
         self.l1_ratio = l1_ratio  # Strength of l2 regularization
         self.n = system_dim
-        self.n_lift = None
-        self.m = None
+        self.m = control_dim
         self.override_C = override_C
         self.acceleration_bounds = acceleration_bounds #(nx1)
-        self.add_ones=add_ones
-        self.add_state=add_state
+        self.add_ones = add_ones
+        self.add_state = add_state
 
-        lift_dim = basis.Nlift
+        self.n_lift = basis.Nlift
         if self.add_ones:
-            lift_dim += 1
+            self.n_lift += 1
         if self.add_state:
-            lift_dim += basis.n
-        self.Z_std = ones((lift_dim, 1))
+            self.n_lift += basis.n
+        self.Z_std = ones((self.n_lift, 1))
 
     def fit(self, X, X_d, Z, Z_dot, U=None, U_nom=None, X_dot=None):
         """
@@ -127,13 +126,11 @@ class Edmd():
             t = t[:,:U.shape[1]]
 
         Ntraj = X.shape[0]  # Number of trajectories in dataset
-        Z = array([self.lift(X[ii,:,:].transpose(), X[ii,:,:].transpose()) for ii in range(Ntraj)])  # Lift x
-        #Z_old = copy(Z)  #TODO: Remove after debug
+        order = 'F'
+        Z = array([self.lift(X[ii,:,:].transpose(), X_d[ii,:,:].transpose()) for ii in range(Ntraj)])  # Lift x
+
         # Vectorize Z- data
         n_data = Z.shape[0] * Z.shape[1]
-        self.n_lift = Z.shape[2]
-        self.m = U.shape[2]
-        order = 'F'
         Z_vec = Z.transpose().reshape((self.n_lift, n_data), order=order)
 
         # Normalize data
@@ -141,10 +138,7 @@ class Edmd():
         self.Z_std[argwhere(self.Z_std == 0.)] = 1.
         self.Z_std[:self.n] = 1.  # Do not rescale states. Note: Assumes state is added to beginning of observables
         self.Z_std = self.Z_std.reshape((self.Z_std.shape[0], 1))
-        #self.Z_std = ones_like(self.Z_std)  #TODO: Remove after debug
         Z_norm = array([divide(Z[ii,:,:], self.Z_std.transpose()) for ii in range(Z.shape[0])])
-        #Z_norm = Z  #TODO: Remove after debug
-
         Z_dot = array([differentiate_vec(Z_norm[ii,:,:],t[ii,:]) for ii in range(Ntraj)])  #Numerical differentiate lifted state
 
         #Vectorize remaining data
