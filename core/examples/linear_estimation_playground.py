@@ -81,6 +81,8 @@ for i in range(Nen):
     
 #plt.hist([B[j][i][1,0] for i in range(99) for j in range(Ntraj)],bins=50)
 #plt.show()
+
+
 eks = InverseKalmanFilter(A_mean,B_mean,E_mean,eta_0,B_0,dt=dt,nk=10,maxiter=20)
 eks.fit(X, U=U)
 cov_B = eks.eks.cov_theta
@@ -89,7 +91,11 @@ print(f"B:{B_mean[1]} vs recovered:{B_reco[1]}")
 print(f"sigma B_time:{sigmaB_timestep[1]}, sigma B_traj:{sigmaB_traj[1]}  vs recovered:{cov_B}")
 
 
-    
+#! Trajectory Bootstrap
+for i in range(Ntraj):
+    X_dot = differentiate_vec(X[i,:,:],t_temp[i,:])
+
+
 #%%
 #! ============================== PLOT RAW  =================================
 case_name = "test"
