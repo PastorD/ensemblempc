@@ -282,6 +282,8 @@ class EKS():
         xepast = xe
 
         xe_hist = []
+        dt = 0.1
+
 
         for j in range(self.maxiter):
             
@@ -300,6 +302,8 @@ class EKS():
             Cgg = ( Gxe_d @ Gxe_d.T)/self.Ne
             S = Cgg + R
             K = Cug @ np.linalg.inv(S) 
+
+            tau0i = 
             
             debug = False
             if debug:
@@ -334,14 +338,14 @@ class EKS():
                 plt.savefig(f"eki_debug_states.pdf", format='pdf', dpi=1200)
                 print("test pring")
 
-            Cuu_new = Cuu - K @ S @ K.T# Update Cuu
+            #Cuu_new = Cuu - K @ S @ K.T# Update Cuu
             Yd = np.reshape(Y, (-1, 1)) + np.random.normal(size=(Y.size,self.Ne))*self.eta_0*0.
             
             ubar_new = np.squeeze(ubar) + K @ (Y - gubar)
             
-            
-            xe = xe + K @ (Yd - Gxe) + np.random.multivariate_normal(np.zeros(self.n), Cuu_new, self.Ne).T     
-            
+            for i in range(self.Ne):            
+                xe = xe + K @ (Yd - Gxe) + np.random.multivariate_normal(np.zeros(self.n), Cuu_new, self.Ne).T     
+                xe = (np.eye(self.Nu)+dt*tau0i)
             
             #xe = ubar_new[:, np.newaxis] + np.random.multivariate_normal(np.zeros(self.n), Cuu_new, self.Ne).T     
 
